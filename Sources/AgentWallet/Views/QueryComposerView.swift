@@ -6,14 +6,8 @@ struct QueryComposerView: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             HStack(spacing: 12) {
-                Picker("类型", selection: $store.selectedKind) {
-                    ForEach(QueryKind.allCases) { kind in
-                        Label(kind.title, systemImage: kind.systemImage)
-                            .tag(kind)
-                    }
-                }
-                .pickerStyle(.segmented)
-                .frame(width: 460)
+                KindSegmentedControl(selection: $store.selectedKind)
+                    .frame(width: 460)
 
                 Spacer()
 
@@ -79,6 +73,44 @@ struct QueryComposerView: View {
         }
         .padding(20)
         .background(Color.black.opacity(0.035))
+    }
+}
+
+private struct KindSegmentedControl: View {
+    @Binding var selection: QueryKind
+
+    var body: some View {
+        HStack(spacing: 4) {
+            ForEach(QueryKind.allCases) { kind in
+                Button {
+                    selection = kind
+                } label: {
+                    HStack(spacing: 5) {
+                        Image(systemName: kind.systemImage)
+                            .font(.system(size: 12, weight: .semibold))
+                        Text(kind.title)
+                            .font(.system(size: 13, weight: .semibold))
+                    }
+                    .foregroundStyle(selection == kind ? AppTheme.primaryText : AppTheme.mutedText)
+                    .frame(maxWidth: .infinity, minHeight: 30)
+                    .background(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .fill(selection == kind ? Color.white.opacity(0.76) : Color.clear)
+                    )
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(selection == kind ? AppTheme.border : Color.clear, lineWidth: 1)
+                    )
+                }
+                .buttonStyle(.plain)
+            }
+        }
+        .padding(4)
+        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        )
     }
 }
 
