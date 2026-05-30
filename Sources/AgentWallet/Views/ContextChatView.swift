@@ -20,6 +20,9 @@ struct ContextChatView: View {
             HStack(alignment: .bottom, spacing: 10) {
                 TextField("问 AI：这段内容是什么？这个地址有什么风险？这个项目在做什么？", text: $store.chatQuestion, axis: .vertical)
                     .textFieldStyle(.plain)
+                    .foregroundStyle(AppTheme.primaryText)
+                    .colorScheme(.light)
+                    .tint(AppTheme.accent)
                     .padding(12)
                     .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                     .overlay(

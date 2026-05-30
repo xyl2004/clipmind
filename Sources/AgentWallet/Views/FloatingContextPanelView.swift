@@ -72,6 +72,9 @@ struct FloatingContextPanelView: View {
         )
         .shadow(color: Color.black.opacity(0.24), radius: 24, x: 0, y: 12)
         .padding(chromePadding)
+        .foregroundStyle(AppTheme.primaryText)
+        .environment(\.colorScheme, .light)
+        .tint(AppTheme.accent)
         .onAppear(perform: reportSize)
         .onChange(of: store.chatMessages.count) { reportSize() }
         .onChange(of: store.chatQuestion) { reportSize() }
@@ -228,6 +231,10 @@ struct FloatingContextPanelView: View {
         HStack(alignment: .bottom, spacing: 10) {
             TextField("问 AI：这段内容是什么？这个地址有什么风险？这个项目在做什么？", text: $store.chatQuestion, axis: .vertical)
                 .textFieldStyle(.plain)
+                .foregroundStyle(AppTheme.primaryText)
+                .font(.callout)
+                .colorScheme(.light)
+                .tint(AppTheme.accent)
                 .padding(11)
                 .background(Color.white.opacity(0.62), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(

@@ -51,6 +51,9 @@ struct QueryComposerView: View {
             TextField("粘贴 Base 地址、代币合约、交易哈希或项目名称", text: $store.input, axis: .vertical)
                 .textFieldStyle(.plain)
                 .font(.system(.body, design: .monospaced))
+                .foregroundStyle(AppTheme.primaryText)
+                .colorScheme(.light)
+                .tint(AppTheme.accent)
                 .padding(12)
                 .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
@@ -93,6 +96,9 @@ private struct LLMSettingsInlineView: View {
             } else {
                 SecureField("B.AI API Key", text: $store.apiKeyDraft)
                     .textFieldStyle(.plain)
+                    .foregroundStyle(AppTheme.primaryText)
+                    .colorScheme(.light)
+                    .tint(AppTheme.accent)
                     .padding(.horizontal, 10)
                     .padding(.vertical, 7)
                     .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
