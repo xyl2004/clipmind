@@ -116,7 +116,7 @@ private struct AIExplanationCard: View {
                         .foregroundStyle(.secondary)
                 }
             } else if let explanation, !explanation.isEmpty {
-                Text(explanation)
+                Text(verbatim: explanation)
                     .textSelection(.enabled)
                     .frame(maxWidth: .infinity, alignment: .leading)
             } else if let errorMessage {

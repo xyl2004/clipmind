@@ -49,6 +49,6 @@ struct ContentView: View {
             }
         }
         .background(AppTheme.background)
-        .foregroundStyle(.white)
+        .foregroundStyle(AppTheme.primaryText)
     }
 }

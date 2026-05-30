@@ -77,12 +77,12 @@ struct ContextChatView: View {
 
             Text(store.input.isEmpty ? "还没有上下文。选中文字后按快捷键，或直接在上方输入框粘贴内容。" : store.input)
                 .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(store.input.isEmpty ? AppTheme.mutedText : .white)
+                .foregroundStyle(store.input.isEmpty ? AppTheme.mutedText : AppTheme.primaryText)
                 .lineLimit(4)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(10)
-                .background(Color.black.opacity(0.22), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(
                     RoundedRectangle(cornerRadius: 10, style: .continuous)
                         .stroke(AppTheme.border, lineWidth: 1)
@@ -111,7 +111,7 @@ private struct ChatBubble: View {
             Text(message.role == .assistant ? "AI" : "你")
                 .font(.caption)
                 .foregroundStyle(AppTheme.mutedText)
-            Text(message.text)
+            Text(verbatim: message.text)
                 .textSelection(.enabled)
         }
         .padding(10)

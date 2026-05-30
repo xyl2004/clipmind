@@ -75,7 +75,7 @@ struct QueryComposerView: View {
             LLMSettingsInlineView(store: store)
         }
         .padding(20)
-        .background(Color.black.opacity(0.10))
+        .background(Color.black.opacity(0.035))
     }
 }
 

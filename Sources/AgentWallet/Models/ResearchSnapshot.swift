@@ -65,6 +65,7 @@ struct ContextChatSession: Identifiable {
     let createdAt = Date()
     var updatedAt = Date()
     var messages: [ContextChatMessage] = []
+    var surfSnapshot: ResearchSnapshot?
 
     var title: String {
         let normalized = context
@@ -83,6 +84,10 @@ struct ContextChatSession: Identifiable {
     }
 
     var subtitle: String {
+        if let surfSnapshot {
+            return "\(surfSnapshot.kind.title) · \(messages.count) 条消息"
+        }
+
         if messages.isEmpty {
             return "尚未提问"
         }

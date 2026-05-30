@@ -76,7 +76,7 @@ struct SidebarView: View {
             Spacer(minLength: 0)
         }
         .padding(18)
-        .background(Color.black.opacity(0.18))
+        .background(Color.white.opacity(0.55))
         .overlay(alignment: .trailing) {
             Rectangle()
                 .fill(AppTheme.border)
@@ -100,7 +100,7 @@ private struct SidebarMetric: View {
             Spacer()
             Text(value)
                 .font(.system(.caption, design: .monospaced).weight(.semibold))
-                .foregroundStyle(.white)
+                .foregroundStyle(AppTheme.primaryText)
         }
         .font(.caption)
         .padding(.horizontal, 10)

@@ -92,18 +92,19 @@ struct LLMClient {
             throw LLMClientError.emptyResponse
         }
 
-        return content.trimmingCharacters(in: .whitespacesAndNewlines)
+        return normalizeAssistantOutput(content)
     }
 
     private var systemPrompt: String {
         """
         你是 AgentWallet 的链上研究助手。你只根据用户提供的 Surf 数据做中文解释，不要编造未出现的数据。
         输出面向普通 Web3 用户，简洁、直接、可执行。
+        必须使用纯文本中文，不要使用 Markdown 标记，不要输出星号、井号、反引号或表格。
         结构固定为：
-        1. 一句话结论
-        2. 关键信号
-        3. 风险提示
-        4. 下一步建议
+        结论：
+        关键信号：
+        风险提示：
+        下一步建议：
         如果数据不足，明确写“当前数据不足以判断”。不要构成投资建议，不要让用户直接买入。
         """
     }
@@ -113,7 +114,10 @@ struct LLMClient {
         你是 AgentWallet 的上下文 AI 助手。用户会选中一段文字、地址、合约、交易哈希或网页内容，然后向你提问。
         请优先解释“被选中的内容是什么、可能代表什么、用户下一步可以怎么理解它”。
         如果提供了 Surf 链上数据，只能基于这些数据补充说明，不要编造没有出现的数据。
-        回答用中文，简洁直接。涉及交易或代币时必须提醒这不是投资建议，也不要直接劝用户买入。
+        回答用中文，简洁直接。必须使用纯文本，不要使用 Markdown，不要输出星号、井号、反引号或表格。
+        如果内容涉及项目、代币或地址，优先使用这些小标题：结论：、它是什么：、关键数据：、风险：、下一步：。
+        关键数据只能引用 Surf 数据或用户明确提供的信息。
+        涉及交易或代币时必须提醒这不是投资建议，也不要直接劝用户买入。
         多轮对话时请保持对“当前选中内容”的连贯解释，不要忘记上下文。
         """
     }
@@ -179,6 +183,39 @@ struct LLMClient {
         }
         let head = String(decoding: utf8.prefix(cutoff), as: UTF8.self)
         return head + "\n…(已按字节截断，剩余内容省略)"
+    }
+
+    private func normalizeAssistantOutput(_ content: String) -> String {
+        let trimmed = content.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lines = trimmed.components(separatedBy: .newlines).map { rawLine in
+            var line = rawLine.trimmingCharacters(in: .whitespaces)
+            line = line.replacingOccurrences(
+                of: "^#{1,6}\\s+",
+                with: "",
+                options: .regularExpression
+            )
+            line = line.replacingOccurrences(
+                of: "^[-*]\\s+",
+                with: "",
+                options: .regularExpression
+            )
+            return line
+        }
+
+        var normalized = lines.joined(separator: "\n")
+        normalized = normalized.replacingOccurrences(
+            of: "\\*\\*(.*?)\\*\\*",
+            with: "$1",
+            options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(
+            of: "__(.*?)__",
+            with: "$1",
+            options: .regularExpression
+        )
+        normalized = normalized.replacingOccurrences(of: "`", with: "")
+        normalized = normalized.replacingOccurrences(of: "*", with: "")
+        return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
     }
 
     private func parseContent(_ data: Data) -> String? {

@@ -7,7 +7,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
 
     private var panel: FloatingChatPanel?
     private var hostingView: NSHostingView<FloatingContextPanelView>?
-    private var lastReportedSize = CGSize(width: 620, height: 520)
+    private var lastReportedSize = CGSize(width: 836, height: 244)
     private var pendingAnchor: CGRect?
 
     private override init() {}
@@ -30,7 +30,7 @@ final class FloatingPanelController: NSObject, NSWindowDelegate {
         }
 
         let panel = FloatingChatPanel(
-            contentRect: NSRect(x: 0, y: 0, width: 620, height: 520),
+            contentRect: NSRect(x: 0, y: 0, width: lastReportedSize.width, height: lastReportedSize.height),
             styleMask: [.borderless, .nonactivatingPanel],
             backing: .buffered,
             defer: false

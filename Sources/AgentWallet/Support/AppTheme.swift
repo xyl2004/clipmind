@@ -1,15 +1,16 @@
 import SwiftUI
 
 enum AppTheme {
-    static let canvasTop = Color(red: 0.07, green: 0.08, blue: 0.06)
-    static let canvasBottom = Color(red: 0.12, green: 0.11, blue: 0.09)
-    static let panel = Color(red: 0.16, green: 0.16, blue: 0.13).opacity(0.82)
-    static let panelSoft = Color(red: 0.20, green: 0.20, blue: 0.16).opacity(0.62)
-    static let border = Color.white.opacity(0.10)
-    static let accent = Color(red: 0.72, green: 0.95, blue: 0.32)
-    static let cyan = Color(red: 0.30, green: 0.88, blue: 0.82)
-    static let rose = Color(red: 0.96, green: 0.42, blue: 0.56)
-    static let mutedText = Color.white.opacity(0.62)
+    static let canvasTop = Color(red: 0.98, green: 0.97, blue: 0.95)
+    static let canvasBottom = Color(red: 0.93, green: 0.92, blue: 0.88)
+    static let panel = Color.white.opacity(0.86)
+    static let panelSoft = Color.white.opacity(0.60)
+    static let border = Color.black.opacity(0.12)
+    static let accent = Color(red: 0.40, green: 0.70, blue: 0.20)
+    static let cyan = Color(red: 0.08, green: 0.55, blue: 0.55)
+    static let rose = Color(red: 0.85, green: 0.25, blue: 0.42)
+    static let primaryText = Color(red: 0.10, green: 0.11, blue: 0.10)
+    static let mutedText = Color.black.opacity(0.58)
 
     static var background: some View {
         LinearGradient(
@@ -18,12 +19,12 @@ enum AppTheme {
             endPoint: .bottomTrailing
         )
         .overlay(
-            AppTheme.cyan.opacity(0.12)
+            AppTheme.cyan.opacity(0.06)
                 .blur(radius: 90)
                 .offset(x: -300, y: -220)
         )
         .overlay(
-            AppTheme.accent.opacity(0.10)
+            AppTheme.accent.opacity(0.06)
                 .blur(radius: 80)
                 .offset(x: 320, y: 240)
         )
@@ -53,7 +54,7 @@ struct ProductButtonStyle: ButtonStyle {
     func makeBody(configuration: Configuration) -> some View {
         configuration.label
             .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(prominent ? Color.black : Color.white.opacity(0.88))
+            .foregroundStyle(prominent ? Color.white : AppTheme.primaryText.opacity(0.88))
             .padding(.horizontal, 12)
             .padding(.vertical, 8)
             .background(

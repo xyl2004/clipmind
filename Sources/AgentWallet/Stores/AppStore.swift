@@ -13,6 +13,9 @@ final class AppStore: ObservableObject {
     @Published var chatMessages: [ContextChatMessage] = []
     @Published var chatSessions: [ContextChatSession] = []
     @Published var activeChatSessionID: ContextChatSession.ID?
+    @Published var contextDetailSnapshot: ResearchSnapshot?
+    @Published var isLoadingContextDetails = false
+    @Published var contextDetailErrorMessage: String?
     @Published var isAnsweringQuestion = false
     @Published var errorMessage: String?
     @Published var llmErrorMessage: String?
@@ -28,6 +31,32 @@ final class AppStore: ObservableObject {
 
     var effectiveKind: QueryKind {
         QueryClassifier.classify(input, preferredKind: selectedKind)
+    }
+
+    var activeChatSession: ContextChatSession? {
+        guard let activeChatSessionID else {
+            return nil
+        }
+
+        return chatSessions.first { $0.id == activeChatSessionID }
+    }
+
+    var currentContextSnapshot: ResearchSnapshot? {
+        let context = input.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let contextDetailSnapshot, contextDetailSnapshot.query == context {
+            return contextDetailSnapshot
+        }
+
+        if let result, result.query == context {
+            return result
+        }
+
+        if let snapshot = activeChatSession?.surfSnapshot, snapshot.query == context {
+            return snapshot
+        }
+
+        return nil
     }
 
     func showMainWindow() {
@@ -50,26 +79,35 @@ final class AppStore: ObservableObject {
     }
 
     func handleGlobalHotKey() {
-        captureSelectedText()
+        let didCaptureText = captureSelectedText()
         showFloatingChatPanel()
+        if didCaptureText {
+            Task {
+                await preloadContextDetailsIfUseful()
+            }
+        }
     }
 
-    func captureClipboard() {
+    @discardableResult
+    func captureClipboard() -> Bool {
         guard let text = NSPasteboard.general.string(forType: .string) else {
             errorMessage = "剪贴板里没有可查询的文本。"
-            return
+            return false
         }
 
         input = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        selectedKind = .auto
         selectedTextSourceRect = nil
         selectedTextMessage = "已读取剪贴板内容。"
         startNewContextSession(with: input)
         if QueryClassifier.isAddress(input) {
             tradeDraft.tokenAddress = input
         }
+        return true
     }
 
-    func captureSelectedText() {
+    @discardableResult
+    func captureSelectedText() -> Bool {
         switch SelectedTextReader.readSelectedText() {
         case .success(let text, let source, let sourceRect):
             input = text
@@ -82,9 +120,11 @@ final class AppStore: ObservableObject {
             if QueryClassifier.isAddress(input) {
                 tradeDraft.tokenAddress = input
             }
+            return true
         case .failure(let message):
             selectedTextMessage = nil
             errorMessage = message
+            return false
         }
     }
 
@@ -111,14 +151,21 @@ final class AppStore: ObservableObject {
     func selectChatSession(_ session: ContextChatSession) {
         activeChatSessionID = session.id
         input = session.context
+        selectedKind = .auto
         chatMessages = session.messages
+        contextDetailSnapshot = session.surfSnapshot
+        contextDetailErrorMessage = nil
+        isLoadingContextDetails = false
         chatQuestion = ""
         selectedTextSourceRect = nil
         selectedTextMessage = "已切换到历史对话。"
-        result = nil
+        result = session.surfSnapshot
         aiExplanation = nil
         llmErrorMessage = nil
         errorMessage = nil
+        Task {
+            await preloadContextDetailsIfUseful()
+        }
     }
 
     func runResearch() async {
@@ -142,6 +189,8 @@ final class AppStore: ObservableObject {
         do {
             let snapshot = try await surfClient.research(query: query, kind: kind)
             result = snapshot
+            contextDetailSnapshot = snapshot
+            syncActiveSessionSnapshot(snapshot)
 
             if kind == .token || (kind == .wallet && QueryClassifier.isAddress(query)) {
                 tradeDraft.tokenAddress = query
@@ -152,6 +201,39 @@ final class AppStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+
+    func preloadContextDetailsIfUseful() async {
+        let context = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !context.isEmpty, shouldFetchSurfContext(for: context) else {
+            contextDetailSnapshot = nil
+            contextDetailErrorMessage = nil
+            isLoadingContextDetails = false
+            return
+        }
+
+        if snapshotForCurrentContext(context) != nil {
+            contextDetailSnapshot = snapshotForCurrentContext(context)
+            contextDetailErrorMessage = nil
+            return
+        }
+
+        let sessionID = activeChatSessionID
+        isLoadingContextDetails = true
+        contextDetailErrorMessage = nil
+
+        do {
+            _ = try await optionalSurfContext(for: context, sessionID: sessionID)
+        } catch {
+            guard activeChatSessionID == sessionID else {
+                return
+            }
+            contextDetailErrorMessage = error.localizedDescription
+        }
+
+        if activeChatSessionID == sessionID {
+            isLoadingContextDetails = false
         }
     }
 
@@ -193,20 +275,20 @@ final class AppStore: ObservableObject {
         isAnsweringQuestion = true
         llmErrorMessage = nil
         errorMessage = nil
+        let sessionID = activeChatSessionID
+        let requestHistory = chatMessages
 
         do {
-            let snapshot = try await optionalSurfContext(for: context)
+            let snapshot = try await optionalSurfContext(for: context, sessionID: sessionID)
             let answer = try await llmClient.answerAboutContext(
                 selectedText: context,
                 surfSnapshot: snapshot,
-                history: chatMessages
+                history: requestHistory
             )
-            chatMessages.append(ContextChatMessage(role: .assistant, text: answer))
-            syncActiveSessionMessages()
+            appendMessage(ContextChatMessage(role: .assistant, text: answer), to: sessionID)
         } catch {
             llmErrorMessage = error.localizedDescription
-            chatMessages.append(ContextChatMessage(role: .assistant, text: error.localizedDescription))
-            syncActiveSessionMessages()
+            appendMessage(ContextChatMessage(role: .assistant, text: error.localizedDescription), to: sessionID)
         }
 
         isAnsweringQuestion = false
@@ -226,6 +308,9 @@ final class AppStore: ObservableObject {
         result = nil
         aiExplanation = nil
         llmErrorMessage = nil
+        contextDetailSnapshot = nil
+        contextDetailErrorMessage = nil
+        isLoadingContextDetails = false
     }
 
     private func syncActiveSessionMessages() {
@@ -243,9 +328,52 @@ final class AppStore: ObservableObject {
         }
     }
 
-    private func optionalSurfContext(for context: String) async throws -> ResearchSnapshot? {
-        if let result, result.query == context {
-            return result
+    private func syncActiveSessionSnapshot(_ snapshot: ResearchSnapshot) {
+        guard let activeChatSessionID else {
+            return
+        }
+
+        syncSessionSnapshot(snapshot, sessionID: activeChatSessionID)
+    }
+
+    private func appendMessage(_ message: ContextChatMessage, to sessionID: ContextChatSession.ID?) {
+        guard let sessionID else {
+            chatMessages.append(message)
+            return
+        }
+
+        if activeChatSessionID == sessionID {
+            chatMessages.append(message)
+            syncActiveSessionMessages()
+            return
+        }
+
+        guard let index = chatSessions.firstIndex(where: { $0.id == sessionID }) else {
+            return
+        }
+
+        chatSessions[index].messages.append(message)
+        chatSessions[index].updatedAt = Date()
+
+        let session = chatSessions.remove(at: index)
+        chatSessions.insert(session, at: 0)
+    }
+
+    private func syncSessionSnapshot(_ snapshot: ResearchSnapshot, sessionID: ContextChatSession.ID) {
+        guard let index = chatSessions.firstIndex(where: { $0.id == sessionID }) else {
+            return
+        }
+
+        chatSessions[index].surfSnapshot = snapshot
+        chatSessions[index].updatedAt = Date()
+    }
+
+    private func optionalSurfContext(
+        for context: String,
+        sessionID: ContextChatSession.ID?
+    ) async throws -> ResearchSnapshot? {
+        if let snapshot = snapshotForCurrentContext(context) {
+            return snapshot
         }
 
         guard shouldFetchSurfContext(for: context) else {
@@ -259,11 +387,35 @@ final class AppStore: ObservableObject {
 
         do {
             let snapshot = try await surfClient.research(query: context, kind: kind)
-            result = snapshot
+            if let sessionID {
+                syncSessionSnapshot(snapshot, sessionID: sessionID)
+            }
+
+            if activeChatSessionID == sessionID,
+               input.trimmingCharacters(in: .whitespacesAndNewlines) == context {
+                result = snapshot
+                contextDetailSnapshot = snapshot
+            }
             return snapshot
         } catch SurfClientError.unsupportedInput {
             return nil
         }
+    }
+
+    private func snapshotForCurrentContext(_ context: String) -> ResearchSnapshot? {
+        if let contextDetailSnapshot, contextDetailSnapshot.query == context {
+            return contextDetailSnapshot
+        }
+
+        if let result, result.query == context {
+            return result
+        }
+
+        if let snapshot = activeChatSession?.surfSnapshot, snapshot.query == context {
+            return snapshot
+        }
+
+        return nil
     }
 
     private func shouldFetchSurfContext(for context: String) -> Bool {
