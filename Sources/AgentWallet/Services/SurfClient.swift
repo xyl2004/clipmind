@@ -1,12 +1,11 @@
 import Foundation
 
 actor SurfClient {
-    private let baseChain = "base"
     private let commandTimeout: TimeInterval = 30
     private var cachedExecutable: String?
 
-    func research(query: String, kind: QueryKind) async throws -> ResearchSnapshot {
-        let ops = operations(for: query, kind: kind)
+    func research(query: String, kind: QueryKind, chainFilter: ChainFilter) async throws -> ResearchSnapshot {
+        let ops = operations(for: query, kind: kind, chainFilter: chainFilter)
         guard !ops.isEmpty else {
             throw SurfClientError.unsupportedInput
         }
@@ -39,86 +38,94 @@ actor SurfClient {
         return ResearchSnapshotBuilder.snapshot(
             query: query,
             kind: kind,
+            chainFilter: chainFilter,
             results: results
         )
     }
 
-    private func operations(for query: String, kind: QueryKind) -> [SurfOperation] {
+    private func operations(for query: String, kind: QueryKind, chainFilter: ChainFilter) -> [SurfOperation] {
         switch kind {
         case .auto:
             let classified = QueryClassifier.classify(query, preferredKind: .auto)
             guard classified != .auto else { return [] }
-            return operations(for: query, kind: classified)
+            return operations(for: query, kind: classified, chainFilter: chainFilter)
         case .wallet:
-            return [
-                SurfOperation(
-                    command: "wallet-detail",
-                    arguments: [
-                        "--address", query,
-                        "--chain", baseChain,
-                        "--fields", "balance,tokens,labels,approvals"
-                    ],
-                    title: "Base 钱包资产"
-                ),
-                SurfOperation(
-                    command: "wallet-transfers",
-                    arguments: [
-                        "--address", query,
-                        "--chain", baseChain,
-                        "--limit", "10",
-                        "--include", "labels"
-                    ],
-                    title: "近期 Base 转账"
-                ),
-                gasOperation()
-            ]
+            return targetChains(for: query, kind: kind, chainFilter: chainFilter).flatMap { chain in
+                [
+                    SurfOperation(
+                        command: "wallet-detail",
+                        arguments: [
+                            "--address", query,
+                            "--chain", chain.surfSlug,
+                            "--fields", "balance,tokens,labels,approvals"
+                        ],
+                        title: "\(chain.shortName) 钱包资产",
+                        chain: chain
+                    ),
+                    SurfOperation(
+                        command: "wallet-transfers",
+                        arguments: [
+                            "--address", query,
+                            "--chain", chain.surfSlug,
+                            "--limit", "10",
+                            "--include", "labels"
+                        ],
+                        title: "近期 \(chain.shortName) 转账",
+                        chain: chain
+                    )
+                ]
+            }
         case .token:
-            return [
-                SurfOperation(
-                    command: "token-holders",
-                    arguments: [
-                        "--address", query,
-                        "--chain", baseChain,
-                        "--limit", "10",
-                        "--include", "labels"
-                    ],
-                    title: "Base 代币持仓分布"
-                ),
-                SurfOperation(
-                    command: "token-dex-trades",
-                    arguments: [
-                        "--address", query,
-                        "--chain", baseChain,
-                        "--limit", "10",
-                        "--include", "labels"
-                    ],
-                    title: "近期 Base DEX 交易"
-                ),
-                SurfOperation(
-                    command: "token-transfers",
-                    arguments: [
-                        "--address", query,
-                        "--chain", baseChain,
-                        "--limit", "10",
-                        "--include", "labels"
-                    ],
-                    title: "近期 Base 代币转账"
-                ),
-                gasOperation()
-            ]
+            return targetChains(for: query, kind: kind, chainFilter: chainFilter).flatMap { chain in
+                [
+                    SurfOperation(
+                        command: "token-holders",
+                        arguments: [
+                            "--address", query,
+                            "--chain", chain.surfSlug,
+                            "--limit", "10",
+                            "--include", "labels"
+                        ],
+                        title: "\(chain.shortName) 代币持仓分布",
+                        chain: chain
+                    ),
+                    SurfOperation(
+                        command: "token-dex-trades",
+                        arguments: [
+                            "--address", query,
+                            "--chain", chain.surfSlug,
+                            "--limit", "10",
+                            "--include", "labels"
+                        ],
+                        title: "近期 \(chain.shortName) DEX 交易",
+                        chain: chain
+                    ),
+                    SurfOperation(
+                        command: "token-transfers",
+                        arguments: [
+                            "--address", query,
+                            "--chain", chain.surfSlug,
+                            "--limit", "10",
+                            "--include", "labels"
+                        ],
+                        title: "近期 \(chain.shortName) 代币转账",
+                        chain: chain
+                    )
+                ]
+            }
         case .transaction:
-            return [
+            return targetChains(for: query, kind: kind, chainFilter: chainFilter).map { chain in
                 SurfOperation(
                     command: "onchain-tx",
                     arguments: [
                         "--hash", query,
-                        "--chain", baseChain,
+                        "--chain", chain.surfSlug,
                         "--include", "labels"
                     ],
-                    title: "Base 交易详情"
-                ),
-                gasOperation()
-            ]
+                    title: "\(chain.shortName) 交易详情",
+                    chain: chain
+                )
+            }
         case .project:
             return [
                 SurfOperation(
@@ -127,7 +134,8 @@ actor SurfClient {
                         "--q", query,
                         "--fields", "overview,token_info,contracts,social"
                     ],
-                    title: "项目详情"
+                    title: "项目详情",
+                    chain: nil
                 ),
                 SurfOperation(
                     command: "search-news",
@@ -135,19 +143,23 @@ actor SurfClient {
                         "--q", query,
                         "--limit", "5"
                     ],
-                    title: "近期加密新闻"
-                ),
-                gasOperation()
+                    title: "近期加密新闻",
+                    chain: nil
+                )
             ]
         }
     }
 
-    private func gasOperation() -> SurfOperation {
-        SurfOperation(
-            command: "onchain-gas-price",
-            arguments: ["--chain", baseChain],
-            title: "Base Gas 价格"
-        )
+    private func targetChains(for query: String, kind: QueryKind, chainFilter: ChainFilter) -> [ChainProfile] {
+        if let profile = chainFilter.profile {
+            return [profile]
+        }
+
+        if kind == .wallet || kind == .token || kind == .transaction {
+            return ChainRegistry.supported
+        }
+
+        return [ChainRegistry.base]
     }
 
     private func resolveExecutable() throws -> String {
@@ -172,7 +184,7 @@ actor SurfClient {
             executable: "/usr/bin/env",
             arguments: ["which", "surf"],
             timeout: 5,
-            operation: SurfOperation(command: "which", arguments: [], title: "")
+            operation: SurfOperation(command: "which", arguments: [], title: "", chain: nil)
         ),
            result.exitCode == 0 {
             let path = result.stdout.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -295,6 +307,11 @@ struct SurfOperation: Sendable {
     let command: String
     let arguments: [String]
     let title: String
+    let chain: ChainProfile?
+
+    var renderedCommand: String {
+        (["surf", command] + arguments).joined(separator: " ")
+    }
 }
 
 struct SurfCommandResult: @unchecked Sendable {

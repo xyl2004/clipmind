@@ -6,6 +6,7 @@ struct ResearchSnapshot: Identifiable {
     let subtitle: String
     let query: String
     let kind: QueryKind
+    let chains: [ChainProfile]
     let createdAt: Date
     let sections: [ResearchSection]
     let commands: [SurfCommandSummary]

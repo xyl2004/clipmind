@@ -126,7 +126,7 @@ struct LLMClient {
         """
         查询对象：\(snapshot.query)
         查询类型：\(snapshot.kind.title)
-        网络：Base
+        网络：\(chainSummary(for: snapshot))
 
         结构化展示：
         \(sectionSummary(for: snapshot))
@@ -151,7 +151,7 @@ struct LLMClient {
         if let surfSnapshot {
             parts.append("""
 
-            [可用的 Surf/Base 数据]
+            [可用的 Surf/EVM 数据]
             \(sectionSummary(for: surfSnapshot))
 
             [Surf 原始 JSON]
@@ -168,6 +168,14 @@ struct LLMClient {
             return "## \(section.title)\n\(rows)"
         }
         .joined(separator: "\n\n")
+    }
+
+    private func chainSummary(for snapshot: ResearchSnapshot) -> String {
+        guard !snapshot.chains.isEmpty else {
+            return "EVM"
+        }
+
+        return snapshot.chains.map(\.displayName).joined(separator: ", ")
     }
 
     /// Truncate by UTF-8 byte length so we don't blow up token budget on

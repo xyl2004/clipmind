@@ -4,6 +4,7 @@ enum ResearchSnapshotBuilder {
     static func snapshot(
         query: String,
         kind: QueryKind,
+        chainFilter: ChainFilter,
         results: [SurfCommandResult]
     ) -> ResearchSnapshot {
         var sections: [ResearchSection] = []
@@ -30,17 +31,19 @@ enum ResearchSnapshotBuilder {
 
         let commandSummaries = results.map { result in
             SurfCommandSummary(
-                command: "surf \(result.operation.command)",
+                command: result.operation.renderedCommand,
                 succeeded: result.succeeded,
                 summary: result.succeeded ? result.operation.title : (result.errorMessage ?? "失败")
             )
         }
+        let chains = uniqueChains(from: results, fallback: chainFilter.profile.map { [$0] } ?? [])
 
         return ResearchSnapshot(
             title: title(for: kind),
-            subtitle: "Base 网络 · Surf 实时数据",
+            subtitle: subtitle(for: chains, chainFilter: chainFilter),
             query: query,
             kind: kind,
+            chains: chains,
             createdAt: Date(),
             sections: sections,
             commands: commandSummaries,
@@ -52,7 +55,7 @@ enum ResearchSnapshotBuilder {
     private static func title(for kind: QueryKind) -> String {
         switch kind {
         case .auto:
-            "Base 查询"
+            "EVM 查询"
         case .wallet:
             "钱包查询"
         case .token:
@@ -101,10 +104,10 @@ enum ResearchSnapshotBuilder {
             let chains = JSONPrettyPrinter.array(balance["chain_balances"])
             sections.append(
                 ResearchSection(
-                    title: "资产概览",
+                    title: titled("资产概览", for: result.operation.chain),
                     rows: [
                         ResearchRow("EVM 总价值", totalUSD, style: .positive),
-                        ResearchRow("查询范围", "链过滤：Base")
+                        ResearchRow("查询范围", result.operation.chain?.displayName ?? "EVM 多链")
                     ] + chains.prefix(4).compactMap { item in
                         guard let dict = item as? [String: Any] else { return nil }
                         return ResearchRow(
@@ -120,7 +123,7 @@ enum ResearchSnapshotBuilder {
         if !tokens.isEmpty {
             sections.append(
                 ResearchSection(
-                    title: "主要代币",
+                    title: titled("主要代币", for: result.operation.chain),
                     rows: tokens.prefix(8).compactMap { item in
                         guard let dict = item as? [String: Any] else { return nil }
                         let symbol = dict["symbol"] as? String ?? "代币"
@@ -148,7 +151,7 @@ enum ResearchSnapshotBuilder {
                 )
             })
             if !rows.isEmpty {
-                sections.append(ResearchSection(title: "地址标签", rows: rows))
+                sections.append(ResearchSection(title: titled("地址标签", for: result.operation.chain), rows: rows))
             }
         }
 
@@ -156,7 +159,7 @@ enum ResearchSnapshotBuilder {
         if !approvals.isEmpty {
             sections.append(
                 ResearchSection(
-                    title: "授权",
+                    title: titled("授权", for: result.operation.chain),
                     rows: approvals.prefix(6).compactMap { item in
                         guard let dict = item as? [String: Any] else { return nil }
                         let symbol = dict["symbol"] as? String ?? "代币"
@@ -187,7 +190,7 @@ enum ResearchSnapshotBuilder {
             return []
         }
 
-        return [ResearchSection(title: "主要持仓地址", rows: rows)]
+        return [ResearchSection(title: titled("主要持仓地址", for: result.operation.chain), rows: rows)]
     }
 
     private static func dexTradeSections(_ result: SurfCommandResult) -> [ResearchSection] {
@@ -204,7 +207,7 @@ enum ResearchSnapshotBuilder {
             return []
         }
 
-        return [ResearchSection(title: "近期 DEX 交易", rows: rows)]
+        return [ResearchSection(title: titled("近期 DEX 交易", for: result.operation.chain), rows: rows)]
     }
 
     private static func transferSections(_ result: SurfCommandResult) -> [ResearchSection] {
@@ -238,7 +241,7 @@ enum ResearchSnapshotBuilder {
             ResearchRow("类型", tx["type"] as? String ?? "-")
         ]
 
-        return [ResearchSection(title: "交易详情", rows: rows)]
+        return [ResearchSection(title: titled("交易详情", for: result.operation.chain), rows: rows)]
     }
 
     private static func gasSections(_ result: SurfCommandResult) -> [ResearchSection] {
@@ -248,7 +251,7 @@ enum ResearchSnapshotBuilder {
 
         return [
             ResearchSection(
-                title: "Base Gas",
+                title: titled("Gas", for: result.operation.chain),
                 rows: [
                     ResearchRow("当前 Gas", "\(JSONPrettyPrinter.formatNumber(data["gas_price_gwei"])) gwei", style: .positive),
                     ResearchRow("链", data["chain"] as? String ?? "base")
@@ -352,8 +355,41 @@ enum ResearchSnapshotBuilder {
     private static func combinedRawJSON(_ results: [SurfCommandResult]) -> String {
         results.map { result in
             let body = JSONPrettyPrinter.prettyString(result.jsonObject) ?? result.stdout
-            return "## surf \(result.operation.command)\n\(body)"
+            return "## \(result.operation.renderedCommand)\n\(body)"
         }
         .joined(separator: "\n\n")
+    }
+
+    private static func titled(_ title: String, for chain: ChainProfile?) -> String {
+        guard let chain else {
+            return title
+        }
+        return "\(chain.shortName) · \(title)"
+    }
+
+    private static func uniqueChains(from results: [SurfCommandResult], fallback: [ChainProfile]) -> [ChainProfile] {
+        var seen: Set<String> = []
+        var chains: [ChainProfile] = []
+
+        for chain in results.filter(\.succeeded).compactMap({ $0.operation.chain }) + fallback {
+            guard !seen.contains(chain.id) else {
+                continue
+            }
+
+            seen.insert(chain.id)
+            chains.append(chain)
+        }
+
+        return chains
+    }
+
+    private static func subtitle(for chains: [ChainProfile], chainFilter: ChainFilter) -> String {
+        if chainFilter.isAutomatic {
+            return chains.count > 1
+                ? "EVM 多链 · Surf 实时数据"
+                : "\(chains.first?.displayName ?? "EVM") · Surf 实时数据"
+        }
+
+        return "\(chainFilter.profile?.displayName ?? "EVM") · Surf 实时数据"
     }
 }

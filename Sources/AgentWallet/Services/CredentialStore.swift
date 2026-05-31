@@ -2,14 +2,87 @@ import Foundation
 import Security
 
 enum CredentialStore {
-    private static let service = "AgentWallet.BAIAPIKey"
+    private static let baiService = "AgentWallet.BAIAPIKey"
+    private static let uniswapService = "AgentWallet.UniswapAPIKey"
     private static let account = "default"
     private static let cacheLock = NSLock()
     private static var cachedBAIAPIKey: String?
+    private static var cachedUniswapAPIKey: String?
 
     static func readBAIAPIKey() -> String? {
+        readAPIKey(
+            service: baiService,
+            cachedValue: { cachedBAIAPIKey },
+            cacheStore: { cachedBAIAPIKey = $0 },
+            environmentKeys: ["AGENTWALLET_BAI_API_KEY", "B_AI_API_KEY"]
+        )
+    }
+
+    static func hasBAIAPIKey() -> Bool {
+        hasAPIKey(
+            service: baiService,
+            cachedValue: { cachedBAIAPIKey },
+            environmentKeys: ["AGENTWALLET_BAI_API_KEY", "B_AI_API_KEY"]
+        )
+    }
+
+    static func saveBAIAPIKey(_ key: String) throws {
+        try saveAPIKey(key, service: baiService) { cachedBAIAPIKey = $0 }
+    }
+
+    static func readUniswapAPIKey() -> String? {
+        readAPIKey(
+            service: uniswapService,
+            cachedValue: { cachedUniswapAPIKey },
+            cacheStore: { cachedUniswapAPIKey = $0 },
+            environmentKeys: ["AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
+        )
+    }
+
+    static func hasUniswapAPIKey() -> Bool {
+        hasAPIKey(
+            service: uniswapService,
+            cachedValue: { cachedUniswapAPIKey },
+            environmentKeys: ["AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
+        )
+    }
+
+    static func saveUniswapAPIKey(_ key: String) throws {
+        try saveAPIKey(key, service: uniswapService) { cachedUniswapAPIKey = $0 }
+    }
+
+    /// Drop the in-memory cache so the next read consults the environment / Keychain again.
+    /// Used when an HTTP 401 suggests the cached value is stale.
+    static func invalidateCache() {
         cacheLock.lock()
-        let cached = cachedBAIAPIKey
+        cachedBAIAPIKey = nil
+        cacheLock.unlock()
+    }
+
+    /// Remove the API key from Keychain (and clear cache). Environment-provided keys
+    /// can't be removed by us, so callers should also unset those env vars.
+    @discardableResult
+    static func clearBAIAPIKey() -> Bool {
+        invalidateCache()
+        return clearAPIKey(service: baiService)
+    }
+
+    @discardableResult
+    static func clearUniswapAPIKey() -> Bool {
+        cacheLock.lock()
+        cachedUniswapAPIKey = nil
+        cacheLock.unlock()
+        return clearAPIKey(service: uniswapService)
+    }
+
+    private static func readAPIKey(
+        service: String,
+        cachedValue: () -> String?,
+        cacheStore: (String) -> Void,
+        environmentKeys: [String]
+    ) -> String? {
+        cacheLock.lock()
+        let cached = cachedValue()
         cacheLock.unlock()
 
         if let cached, !cached.isEmpty {
@@ -17,13 +90,13 @@ enum CredentialStore {
         }
 
         let environment = ProcessInfo.processInfo.environment
-        if let value = environment["AGENTWALLET_BAI_API_KEY"], !value.isEmpty {
-            store(cache: value)
-            return value
-        }
-        if let value = environment["B_AI_API_KEY"], !value.isEmpty {
-            store(cache: value)
-            return value
+        for key in environmentKeys {
+            if let value = environment[key], !value.isEmpty {
+                cacheLock.lock()
+                cacheStore(value)
+                cacheLock.unlock()
+                return value
+            }
         }
 
         var item: CFTypeRef?
@@ -43,13 +116,19 @@ enum CredentialStore {
             return nil
         }
 
-        store(cache: key)
+        cacheLock.lock()
+        cacheStore(key)
+        cacheLock.unlock()
         return key
     }
 
-    static func hasBAIAPIKey() -> Bool {
+    private static func hasAPIKey(
+        service: String,
+        cachedValue: () -> String?,
+        environmentKeys: [String]
+    ) -> Bool {
         cacheLock.lock()
-        let cached = cachedBAIAPIKey
+        let cached = cachedValue()
         cacheLock.unlock()
 
         if let cached, !cached.isEmpty {
@@ -57,17 +136,18 @@ enum CredentialStore {
         }
 
         let environment = ProcessInfo.processInfo.environment
-        if let value = environment["AGENTWALLET_BAI_API_KEY"], !value.isEmpty {
-            return true
-        }
-        if let value = environment["B_AI_API_KEY"], !value.isEmpty {
+        for key in environmentKeys where !(environment[key] ?? "").isEmpty {
             return true
         }
 
-        return keychainItemExists()
+        return keychainItemExists(service: service)
     }
 
-    static func saveBAIAPIKey(_ key: String) throws {
+    private static func saveAPIKey(
+        _ key: String,
+        service: String,
+        cacheStore: (String) -> Void
+    ) throws {
         let trimmed = key.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let data = trimmed.data(using: .utf8) else {
             throw CredentialStoreError.emptyKey
@@ -86,7 +166,9 @@ enum CredentialStore {
 
         let updateStatus = SecItemUpdate(baseQuery as CFDictionary, updateAttributes as CFDictionary)
         if updateStatus == errSecSuccess {
-            store(cache: trimmed)
+            cacheLock.lock()
+            cacheStore(trimmed)
+            cacheLock.unlock()
             return
         }
 
@@ -103,22 +185,12 @@ enum CredentialStore {
             throw CredentialStoreError.keychainStatus(addStatus)
         }
 
-        store(cache: trimmed)
-    }
-
-    /// Drop the in-memory cache so the next read consults the environment / Keychain again.
-    /// Used when an HTTP 401 suggests the cached value is stale.
-    static func invalidateCache() {
         cacheLock.lock()
-        cachedBAIAPIKey = nil
+        cacheStore(trimmed)
         cacheLock.unlock()
     }
 
-    /// Remove the API key from Keychain (and clear cache). Environment-provided keys
-    /// can't be removed by us, so callers should also unset those env vars.
-    @discardableResult
-    static func clearBAIAPIKey() -> Bool {
-        invalidateCache()
+    private static func clearAPIKey(service: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -128,13 +200,7 @@ enum CredentialStore {
         return status == errSecSuccess || status == errSecItemNotFound
     }
 
-    private static func store(cache value: String) {
-        cacheLock.lock()
-        cachedBAIAPIKey = value
-        cacheLock.unlock()
-    }
-
-    private static func keychainItemExists() -> Bool {
+    private static func keychainItemExists(service: String) -> Bool {
         let query: [String: Any] = [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,

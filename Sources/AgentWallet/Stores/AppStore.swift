@@ -5,6 +5,7 @@ import Foundation
 final class AppStore: ObservableObject {
     @Published var input: String = ""
     @Published var selectedKind: QueryKind = .auto
+    @Published var selectedChainID: String = ChainFilter.automatic.id
     @Published var isLoading = false
     @Published var isExplaining = false
     @Published var result: ResearchSnapshot?
@@ -23,14 +24,37 @@ final class AppStore: ObservableObject {
     @Published var apiKeyDraft: String = ""
     @Published var apiKeyStatusMessage: String?
     @Published var hasLLMAPIKey = CredentialStore.hasBAIAPIKey()
+    @Published var uniswapAPIKeyDraft: String = ""
+    @Published var uniswapAPIKeyStatusMessage: String?
+    @Published var hasUniswapAPIKey = CredentialStore.hasUniswapAPIKey()
     @Published var tradeDraft = TradeIntentDraft()
+    @Published var externalWalletSession: ExternalWalletSession?
+    @Published var walletStatusMessage: String?
+    @Published var tradePlan: UniswapTradePlan?
+    @Published var isBuildingTradePlan = false
+    @Published var tradeStatusMessage: String?
+    @Published var tradeErrorMessage: String?
 
     private let surfClient = SurfClient()
     private let llmClient = LLMClient()
+    private let tradeProvider = UniswapTradeProvider()
+    private let externalWalletClient = ExternalWalletClient()
     private var selectedTextSourceRect: CGRect?
 
     var effectiveKind: QueryKind {
         QueryClassifier.classify(input, preferredKind: selectedKind)
+    }
+
+    var selectedChainFilter: ChainFilter {
+        ChainFilter.filter(for: selectedChainID)
+    }
+
+    var selectedTradeChain: ChainProfile {
+        selectedChainFilter.profile ?? result?.chains.first ?? ChainRegistry.base
+    }
+
+    var signerStatusTitle: String {
+        externalWalletSession?.shortAddress ?? "未连接"
     }
 
     var activeChatSession: ContextChatSession? {
@@ -140,9 +164,49 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func saveUniswapAPIKey() {
+        do {
+            try CredentialStore.saveUniswapAPIKey(uniswapAPIKeyDraft)
+            uniswapAPIKeyDraft = ""
+            hasUniswapAPIKey = true
+            uniswapAPIKeyStatusMessage = "Uniswap API Key 已保存到 Keychain。"
+            tradeErrorMessage = nil
+        } catch {
+            uniswapAPIKeyStatusMessage = error.localizedDescription
+        }
+    }
+
+    func selectChain(_ filter: ChainFilter) {
+        selectedChainID = filter.id
+        let chain = filter.profile ?? ChainRegistry.base
+        tradeDraft.applyDefaultSpendToken(for: chain)
+        tradePlan = nil
+        tradeErrorMessage = nil
+        tradeStatusMessage = nil
+    }
+
+    func connectExternalWallet() {
+        do {
+            let session = try externalWalletClient.connect(address: tradeDraft.walletAddress)
+            externalWalletSession = session
+            walletStatusMessage = "已连接外部钱包：\(session.shortAddress)"
+            tradeErrorMessage = nil
+        } catch {
+            walletStatusMessage = error.localizedDescription
+        }
+    }
+
+    func disconnectExternalWallet() {
+        externalWalletSession = nil
+        walletStatusMessage = "已断开外部钱包。"
+    }
+
     func useExample(_ example: QueryExample) {
         input = example.value
         selectedKind = example.kind
+        if let chainID = example.chainID {
+            selectChain(ChainFilter.filter(for: chainID))
+        }
         if example.kind == .token {
             tradeDraft.tokenAddress = example.value
         }
@@ -177,7 +241,7 @@ final class AppStore: ObservableObject {
 
         let kind = QueryClassifier.classify(query, preferredKind: selectedKind)
         guard kind != .auto else {
-            errorMessage = "这段内容看起来不像 Base 地址、交易哈希或项目名。可以直接在下方对话框向 AI 提问。"
+            errorMessage = "这段内容看起来不像 EVM 地址、交易哈希或项目名。可以直接在下方对话框向 AI 提问。"
             return
         }
 
@@ -187,7 +251,11 @@ final class AppStore: ObservableObject {
         errorMessage = nil
 
         do {
-            let snapshot = try await surfClient.research(query: query, kind: kind)
+            let snapshot = try await surfClient.research(
+                query: query,
+                kind: kind,
+                chainFilter: selectedChainFilter
+            )
             result = snapshot
             contextDetailSnapshot = snapshot
             syncActiveSessionSnapshot(snapshot)
@@ -201,6 +269,70 @@ final class AppStore: ObservableObject {
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
+        }
+    }
+
+    func buildTradePlan() async {
+        let chain = selectedTradeChain
+        if selectedChainFilter.isAutomatic {
+            selectedChainID = chain.id
+        }
+        tradeDraft.applyDefaultSpendToken(for: chain)
+
+        guard let externalWalletSession else {
+            tradeErrorMessage = "请先输入外部钱包地址并连接，再生成 Uniswap 确认单。"
+            return
+        }
+
+        guard tradeDraft.canBuildSwapPlan else {
+            tradeErrorMessage = "请检查支付金额、支付资产和目标代币地址。"
+            return
+        }
+
+        hasUniswapAPIKey = CredentialStore.hasUniswapAPIKey()
+        isBuildingTradePlan = true
+        tradePlan = nil
+        tradeErrorMessage = nil
+        tradeStatusMessage = "正在请求 Uniswap 报价。"
+
+        do {
+            let plan = try await tradeProvider.buildSwapPlan(
+                draft: tradeDraft,
+                chain: chain,
+                walletAddress: externalWalletSession.address
+            )
+            tradePlan = plan
+            tradeStatusMessage = "确认单已生成。请在确认风险后发送到外部钱包签名。"
+        } catch {
+            tradeErrorMessage = error.localizedDescription
+            tradeStatusMessage = nil
+        }
+
+        isBuildingTradePlan = false
+    }
+
+    func sendTradeToExternalWallet() async {
+        guard let tradePlan else {
+            tradeErrorMessage = "请先生成 Uniswap 确认单。"
+            return
+        }
+
+        let transaction = tradePlan.approvalTransaction ?? tradePlan.swapTransaction
+        guard let transaction else {
+            tradeErrorMessage = "确认单里没有可发送的交易。"
+            return
+        }
+
+        tradeStatusMessage = "正在发送到外部钱包签名。"
+        tradeErrorMessage = nil
+
+        do {
+            let hash = try await externalWalletClient.send(transaction)
+            let explorerPrefix = tradePlan.chain.explorerTransactionURLPrefix
+            tradeStatusMessage = "交易已广播：\(hash)\n\(explorerPrefix)/\(hash)"
+        } catch {
+            tradeErrorMessage = error.localizedDescription
+            tradeStatusMessage = nil
         }
     }
 
@@ -308,6 +440,9 @@ final class AppStore: ObservableObject {
         result = nil
         aiExplanation = nil
         llmErrorMessage = nil
+        tradePlan = nil
+        tradeStatusMessage = nil
+        tradeErrorMessage = nil
         contextDetailSnapshot = nil
         contextDetailErrorMessage = nil
         isLoadingContextDetails = false
@@ -386,7 +521,11 @@ final class AppStore: ObservableObject {
         }
 
         do {
-            let snapshot = try await surfClient.research(query: context, kind: kind)
+            let snapshot = try await surfClient.research(
+                query: context,
+                kind: kind,
+                chainFilter: selectedChainFilter
+            )
             if let sessionID {
                 syncSessionSnapshot(snapshot, sessionID: sessionID)
             }
@@ -436,17 +575,33 @@ struct QueryExample: Identifiable {
     let title: String
     let value: String
     let kind: QueryKind
+    let chainID: String?
+
+    init(title: String, value: String, kind: QueryKind, chainID: String? = nil) {
+        self.title = title
+        self.value = value
+        self.kind = kind
+        self.chainID = chainID
+    }
 
     static let defaults: [QueryExample] = [
         QueryExample(
             title: "Base USDC 代币",
             value: "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913",
-            kind: .token
+            kind: .token,
+            chainID: ChainRegistry.base.id
         ),
         QueryExample(
-            title: "Base WETH 合约钱包",
+            title: "Ethereum USDC 代币",
+            value: "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+            kind: .token,
+            chainID: ChainRegistry.ethereum.id
+        ),
+        QueryExample(
+            title: "Base WETH 合约",
             value: "0x4200000000000000000000000000000000000006",
-            kind: .wallet
+            kind: .token,
+            chainID: ChainRegistry.base.id
         ),
         QueryExample(
             title: "Uniswap 项目",

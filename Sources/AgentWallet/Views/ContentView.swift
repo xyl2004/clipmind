@@ -30,6 +30,7 @@ struct ContentView: View {
 
                         if let result = store.result {
                             ResearchResultView(
+                                store: store,
                                 snapshot: result,
                                 aiExplanation: store.aiExplanation,
                                 isExplaining: store.isExplaining,

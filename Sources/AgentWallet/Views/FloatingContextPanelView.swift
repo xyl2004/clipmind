@@ -201,7 +201,7 @@ struct FloatingContextPanelView: View {
             HStack(spacing: 10) {
                 ProgressView()
                     .controlSize(.small)
-                Text("正在读取 Base / Surf 详情")
+                Text("正在读取 EVM / Surf 详情")
                     .font(.caption)
                     .foregroundStyle(AppTheme.mutedText)
             }

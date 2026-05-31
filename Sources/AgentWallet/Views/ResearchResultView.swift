@@ -1,6 +1,7 @@
 import SwiftUI
 
 struct ResearchResultView: View {
+    @ObservedObject var store: AppStore
     let snapshot: ResearchSnapshot
     let aiExplanation: String?
     let isExplaining: Bool
@@ -34,7 +35,7 @@ struct ResearchResultView: View {
                 }
             }
 
-            TradeIntentView(query: snapshot.query)
+            TradeIntentView(store: store, query: snapshot.query)
 
             DisclosureGroup("Surf 命令", isExpanded: .constant(true)) {
                 VStack(alignment: .leading, spacing: 8) {

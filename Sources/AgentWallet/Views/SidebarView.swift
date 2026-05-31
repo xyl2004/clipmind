@@ -8,16 +8,16 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 6) {
                 Label("AgentWallet", systemImage: "wallet.pass")
                     .font(.system(size: 22, weight: .bold))
-                Text("Base Context Agent")
+                Text("EVM Multi-chain Agent")
                     .font(.caption)
                     .foregroundStyle(AppTheme.mutedText)
             }
             .padding(.top, 8)
 
             VStack(spacing: 10) {
-                SidebarMetric(title: "Network", value: "Base", systemImage: "bolt.horizontal.circle")
+                SidebarMetric(title: "Network", value: "EVM", systemImage: "bolt.horizontal.circle")
                 SidebarMetric(title: "Data", value: "Surf", systemImage: "waveform.path.ecg")
-                SidebarMetric(title: "Signer", value: "Locked", systemImage: "lock.shield")
+                SidebarMetric(title: "Signer", value: store.signerStatusTitle, systemImage: "lock.shield")
             }
 
             VStack(alignment: .leading, spacing: 10) {
