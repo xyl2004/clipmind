@@ -8,7 +8,6 @@ struct TradeIntentDraft {
     var tokenAddress: String = ""
     var slippage: Double = 1.0
     var recipientAddress: String = ""
-    var walletAddress: String = ""
 
     var canBuildSwapPlan: Bool {
         !spendAmount.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty

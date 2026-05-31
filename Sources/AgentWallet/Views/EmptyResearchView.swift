@@ -6,7 +6,7 @@ struct EmptyResearchView: View {
             Label("EVM 多链查询台", systemImage: "sparkle.magnifyingglass")
                 .font(.title2.weight(.semibold))
 
-            Text("粘贴代币合约、钱包地址、交易哈希或项目名称。AgentWallet 会通过 Surf 获取 EVM 多链实时数据，并用 Uniswap 生成外部钱包确认单。")
+            Text("粘贴代币合约、钱包地址、交易哈希或项目名称。AgentWallet 会通过 Surf 获取 EVM 多链实时数据，并用 Uniswap 生成本地签名确认单。")
                 .foregroundStyle(.secondary)
                 .frame(maxWidth: 760, alignment: .leading)
 

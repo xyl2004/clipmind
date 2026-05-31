@@ -28,7 +28,8 @@ final class AppStore: ObservableObject {
     @Published var uniswapAPIKeyStatusMessage: String?
     @Published var hasUniswapAPIKey = CredentialStore.hasUniswapAPIKey()
     @Published var tradeDraft = TradeIntentDraft()
-    @Published var externalWalletSession: ExternalWalletSession?
+    @Published var localWalletAccount: LocalWalletAccount?
+    @Published var privateKeyDraft: String = ""
     @Published var walletStatusMessage: String?
     @Published var tradePlan: UniswapTradePlan?
     @Published var isBuildingTradePlan = false
@@ -38,8 +39,16 @@ final class AppStore: ObservableObject {
     private let surfClient = SurfClient()
     private let llmClient = LLMClient()
     private let tradeProvider = UniswapTradeProvider()
-    private let externalWalletClient = ExternalWalletClient()
+    private let localWalletClient = LocalWalletClient()
     private var selectedTextSourceRect: CGRect?
+
+    init() {
+        do {
+            localWalletAccount = try localWalletClient.loadAccount()
+        } catch {
+            walletStatusMessage = error.localizedDescription
+        }
+    }
 
     var effectiveKind: QueryKind {
         QueryClassifier.classify(input, preferredKind: selectedKind)
@@ -54,7 +63,7 @@ final class AppStore: ObservableObject {
     }
 
     var signerStatusTitle: String {
-        externalWalletSession?.shortAddress ?? "未连接"
+        localWalletAccount?.shortAddress ?? "未创建"
     }
 
     var activeChatSession: ContextChatSession? {
@@ -185,20 +194,45 @@ final class AppStore: ObservableObject {
         tradeStatusMessage = nil
     }
 
-    func connectExternalWallet() {
+    func createLocalWallet() {
         do {
-            let session = try externalWalletClient.connect(address: tradeDraft.walletAddress)
-            externalWalletSession = session
-            walletStatusMessage = "已连接外部钱包：\(session.shortAddress)"
+            let account = try localWalletClient.createWallet()
+            localWalletAccount = account
+            privateKeyDraft = ""
+            walletStatusMessage = "已创建本地钱包：\(account.shortAddress)。请先给该地址转入交易所需资产和 Gas。"
             tradeErrorMessage = nil
         } catch {
             walletStatusMessage = error.localizedDescription
         }
     }
 
-    func disconnectExternalWallet() {
-        externalWalletSession = nil
-        walletStatusMessage = "已断开外部钱包。"
+    func importLocalWallet() {
+        do {
+            let account = try localWalletClient.importWallet(privateKeyHex: privateKeyDraft)
+            localWalletAccount = account
+            privateKeyDraft = ""
+            walletStatusMessage = "已导入本地钱包：\(account.shortAddress)。私钥仅保存到 macOS Keychain。"
+            tradeErrorMessage = nil
+        } catch {
+            walletStatusMessage = error.localizedDescription
+        }
+    }
+
+    func deleteLocalWallet() {
+        _ = localWalletClient.deleteWallet()
+        localWalletAccount = nil
+        privateKeyDraft = ""
+        tradePlan = nil
+        walletStatusMessage = "已从 Keychain 删除本地钱包。"
+    }
+
+    func reloadLocalWallet() {
+        do {
+            localWalletAccount = try localWalletClient.loadAccount()
+            walletStatusMessage = localWalletAccount == nil ? "当前没有本地钱包。" : "已读取本地钱包：\(localWalletAccount?.shortAddress ?? "")。"
+        } catch {
+            walletStatusMessage = error.localizedDescription
+        }
     }
 
     func useExample(_ example: QueryExample) {
@@ -279,8 +313,8 @@ final class AppStore: ObservableObject {
         }
         tradeDraft.applyDefaultSpendToken(for: chain)
 
-        guard let externalWalletSession else {
-            tradeErrorMessage = "请先输入外部钱包地址并连接，再生成 Uniswap 确认单。"
+        guard let localWalletAccount else {
+            tradeErrorMessage = "请先创建或导入本地钱包，再生成 Uniswap 确认单。"
             return
         }
 
@@ -299,10 +333,10 @@ final class AppStore: ObservableObject {
             let plan = try await tradeProvider.buildSwapPlan(
                 draft: tradeDraft,
                 chain: chain,
-                walletAddress: externalWalletSession.address
+                walletAddress: localWalletAccount.address
             )
             tradePlan = plan
-            tradeStatusMessage = "确认单已生成。请在确认风险后发送到外部钱包签名。"
+            tradeStatusMessage = "确认单已生成。请确认风险后在本机签名广播。"
         } catch {
             tradeErrorMessage = error.localizedDescription
             tradeStatusMessage = nil
@@ -311,7 +345,7 @@ final class AppStore: ObservableObject {
         isBuildingTradePlan = false
     }
 
-    func sendTradeToExternalWallet() async {
+    func signAndBroadcastTrade() async {
         guard let tradePlan else {
             tradeErrorMessage = "请先生成 Uniswap 确认单。"
             return
@@ -323,13 +357,17 @@ final class AppStore: ObservableObject {
             return
         }
 
-        tradeStatusMessage = "正在发送到外部钱包签名。"
+        tradeStatusMessage = tradePlan.needsApproval ? "正在本机签名授权交易。" : "正在本机签名并广播 swap。"
         tradeErrorMessage = nil
 
         do {
-            let hash = try await externalWalletClient.send(transaction)
+            let hash = try await localWalletClient.signAndBroadcast(transaction, chain: tradePlan.chain)
             let explorerPrefix = tradePlan.chain.explorerTransactionURLPrefix
-            tradeStatusMessage = "交易已广播：\(hash)\n\(explorerPrefix)/\(hash)"
+            if tradePlan.needsApproval {
+                tradeStatusMessage = "授权交易已广播：\(hash)\n\(explorerPrefix)/\(hash)\n授权上链后请重新生成报价，再签名兑换。"
+            } else {
+                tradeStatusMessage = "交易已广播：\(hash)\n\(explorerPrefix)/\(hash)"
+            }
         } catch {
             tradeErrorMessage = error.localizedDescription
             tradeStatusMessage = nil

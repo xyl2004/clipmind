@@ -307,7 +307,7 @@ enum UniswapTradeError: LocalizedError {
         case .missingAPIKey:
             "未设置 Uniswap API Key。请保存到 Keychain，或设置 AGENTWALLET_UNISWAP_API_KEY / UNISWAP_API_KEY。"
         case .invalidWallet:
-            "请先输入并连接一个有效的外部钱包地址。"
+            "请先创建或导入一个有效的本地 EVM 钱包。"
         case .invalidToken:
             "目标代币地址不是有效的 EVM 地址。"
         case .invalidSpendToken:

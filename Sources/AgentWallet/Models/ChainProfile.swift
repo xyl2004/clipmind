@@ -7,12 +7,24 @@ struct ChainProfile: Identifiable, Hashable, Sendable {
     let shortName: String
     let surfSlug: String
     let explorerBaseURL: URL
+    let defaultRPCURL: URL
+    let rpcEnvironmentKey: String
     let nativeTokenSymbol: String
     let supportsSwap: Bool
     let defaultSpendToken: TokenProfile
 
     var explorerTransactionURLPrefix: String {
         explorerBaseURL.appendingPathComponent("tx").absoluteString
+    }
+
+    var rpcURL: URL? {
+        if let override = ProcessInfo.processInfo.environment[rpcEnvironmentKey],
+           let url = URL(string: override),
+           !override.isEmpty {
+            return url
+        }
+
+        return defaultRPCURL
     }
 }
 
@@ -36,6 +48,8 @@ enum ChainRegistry {
         shortName: "ETH",
         surfSlug: "ethereum",
         explorerBaseURL: URL(string: "https://etherscan.io")!,
+        defaultRPCURL: URL(string: "https://ethereum-rpc.publicnode.com")!,
+        rpcEnvironmentKey: "AGENTWALLET_RPC_ETHEREUM",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -52,6 +66,8 @@ enum ChainRegistry {
         shortName: "Base",
         surfSlug: "base",
         explorerBaseURL: URL(string: "https://basescan.org")!,
+        defaultRPCURL: URL(string: "https://mainnet.base.org")!,
+        rpcEnvironmentKey: "AGENTWALLET_RPC_BASE",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -68,6 +84,8 @@ enum ChainRegistry {
         shortName: "ARB",
         surfSlug: "arbitrum",
         explorerBaseURL: URL(string: "https://arbiscan.io")!,
+        defaultRPCURL: URL(string: "https://arb1.arbitrum.io/rpc")!,
+        rpcEnvironmentKey: "AGENTWALLET_RPC_ARBITRUM",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -84,6 +102,8 @@ enum ChainRegistry {
         shortName: "OP",
         surfSlug: "optimism",
         explorerBaseURL: URL(string: "https://optimistic.etherscan.io")!,
+        defaultRPCURL: URL(string: "https://mainnet.optimism.io")!,
+        rpcEnvironmentKey: "AGENTWALLET_RPC_OPTIMISM",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -100,6 +120,8 @@ enum ChainRegistry {
         shortName: "Polygon",
         surfSlug: "polygon",
         explorerBaseURL: URL(string: "https://polygonscan.com")!,
+        defaultRPCURL: URL(string: "https://polygon-bor-rpc.publicnode.com")!,
+        rpcEnvironmentKey: "AGENTWALLET_RPC_POLYGON",
         nativeTokenSymbol: "POL",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -116,6 +138,8 @@ enum ChainRegistry {
         shortName: "Unichain",
         surfSlug: "unichain",
         explorerBaseURL: URL(string: "https://uniscan.xyz")!,
+        defaultRPCURL: URL(string: "https://mainnet.unichain.org")!,
+        rpcEnvironmentKey: "AGENTWALLET_RPC_UNICHAIN",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: .nativeETH

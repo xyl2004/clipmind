@@ -13,7 +13,7 @@ struct TradeIntentView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
 
-            externalWalletPanel
+            localWalletPanel
 
             if mode == .swap {
                 swapComposer
@@ -43,44 +43,79 @@ struct TradeIntentView: View {
         }
     }
 
-    private var externalWalletPanel: some View {
+    private var localWalletPanel: some View {
         VStack(alignment: .leading, spacing: 10) {
             HStack(alignment: .firstTextBaseline) {
-                Label("外部钱包", systemImage: "wallet.pass")
+                Label("本地钱包", systemImage: "lock.shield")
                     .font(.callout.weight(.semibold))
                 Spacer()
                 Text(store.signerStatusTitle)
                     .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(store.externalWalletSession == nil ? AppTheme.mutedText : AppTheme.accent)
+                    .foregroundStyle(store.localWalletAccount == nil ? AppTheme.mutedText : AppTheme.accent)
             }
 
-            HStack(spacing: 10) {
-                TextField("0x 钱包地址，用于 Uniswap 报价和外部签名", text: $store.tradeDraft.walletAddress)
-                    .textFieldStyle(.plain)
-                    .font(.system(.callout, design: .monospaced))
-                    .foregroundStyle(AppTheme.primaryText)
-                    .colorScheme(.light)
-                    .tint(AppTheme.accent)
-                    .padding(10)
-                    .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 10, style: .continuous)
-                            .stroke(AppTheme.border, lineWidth: 1)
-                    )
+            if let account = store.localWalletAccount {
+                HStack(spacing: 10) {
+                    Text(account.address)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(AppTheme.primaryText)
+                        .textSelection(.enabled)
+                        .lineLimit(1)
+                        .padding(10)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(AppTheme.border, lineWidth: 1)
+                        )
 
-                Button {
-                    if store.externalWalletSession == nil {
-                        store.connectExternalWallet()
-                    } else {
-                        store.disconnectExternalWallet()
+                    Button {
+                        store.reloadLocalWallet()
+                    } label: {
+                        Label("刷新", systemImage: "arrow.clockwise")
                     }
-                } label: {
-                    Label(store.externalWalletSession == nil ? "连接" : "断开", systemImage: store.externalWalletSession == nil ? "link" : "xmark.circle")
+                    .buttonStyle(ProductButtonStyle())
+
+                    Button(role: .destructive) {
+                        store.deleteLocalWallet()
+                    } label: {
+                        Label("删除", systemImage: "trash")
+                    }
+                    .buttonStyle(ProductButtonStyle())
                 }
-                .buttonStyle(ProductButtonStyle())
+            } else {
+                HStack(spacing: 10) {
+                    SecureField("导入 0x 私钥，或直接创建新钱包", text: $store.privateKeyDraft)
+                        .textFieldStyle(.plain)
+                        .font(.system(.callout, design: .monospaced))
+                        .foregroundStyle(AppTheme.primaryText)
+                        .colorScheme(.light)
+                        .tint(AppTheme.accent)
+                        .padding(10)
+                        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                        .overlay(
+                            RoundedRectangle(cornerRadius: 10, style: .continuous)
+                                .stroke(AppTheme.border, lineWidth: 1)
+                        )
+
+                    Button {
+                        store.createLocalWallet()
+                    } label: {
+                        Label("创建", systemImage: "plus.circle")
+                    }
+                    .buttonStyle(ProductButtonStyle(prominent: true))
+
+                    Button {
+                        store.importLocalWallet()
+                    } label: {
+                        Label("导入", systemImage: "square.and.arrow.down")
+                    }
+                    .buttonStyle(ProductButtonStyle())
+                    .disabled(store.privateKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                }
             }
 
-            Text(store.walletStatusMessage ?? "第一版不保存私钥。交易会发送到外部钱包确认签名。")
+            Text(store.walletStatusMessage ?? "私钥仅保存到 macOS Keychain。AI 不能读取私钥，也不会自动签名；只有你点击确认按钮才会本机签名广播。")
                 .font(.caption)
                 .foregroundStyle(AppTheme.mutedText)
         }
@@ -194,14 +229,14 @@ struct TradeIntentView: View {
                 HStack {
                     Button {
                         Task {
-                            await store.sendTradeToExternalWallet()
+                            await store.signAndBroadcastTrade()
                         }
                     } label: {
-                        Label("发送到外部钱包", systemImage: "paperplane")
+                        Label(plan.needsApproval ? "本机签名授权" : "本机签名兑换", systemImage: "signature")
                     }
                     .buttonStyle(ProductButtonStyle(prominent: true))
 
-                    Text("AI 不会签名。请只在外部钱包中确认你看懂的交易。")
+                    Text(plan.needsApproval ? "需要先授权。授权上链后重新生成报价再兑换。" : "AI 不会签名。请只确认你看懂的交易。")
                         .font(.caption)
                         .foregroundStyle(AppTheme.mutedText)
                 }
@@ -230,7 +265,7 @@ struct TradeIntentView: View {
     }
 
     private var transferPlaceholder: some View {
-        Text("转账会复用同一个外部钱包确认边界；当前版本先实现 Uniswap 同链 swap。")
+        Text("转账会复用同一个本地签名确认边界；当前版本先实现 Uniswap 同链 swap。")
             .font(.caption)
             .foregroundStyle(AppTheme.mutedText)
             .frame(maxWidth: .infinity, alignment: .leading)

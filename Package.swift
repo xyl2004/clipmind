@@ -10,9 +10,15 @@ let package = Package(
     products: [
         .executable(name: "AgentWallet", targets: ["AgentWallet"])
     ],
+    dependencies: [
+        .package(url: "https://github.com/web3swift-team/web3swift.git", from: "3.3.2")
+    ],
     targets: [
         .executableTarget(
             name: "AgentWallet",
+            dependencies: [
+                .product(name: "web3swift", package: "web3swift")
+            ],
             path: "Sources/AgentWallet"
         )
     ]
