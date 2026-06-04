@@ -39,6 +39,14 @@ enum CredentialStore {
         )
     }
 
+    static func readUniswapAPIKeyWithoutPrompt() -> String? {
+        readCachedOrEnvironmentAPIKey(
+            cachedValue: { cachedUniswapAPIKey },
+            cacheStore: { cachedUniswapAPIKey = $0 },
+            environmentKeys: ["AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
+        )
+    }
+
     static func hasUniswapAPIKey() -> Bool {
         hasAPIKey(
             service: uniswapService,
@@ -81,22 +89,12 @@ enum CredentialStore {
         cacheStore: (String) -> Void,
         environmentKeys: [String]
     ) -> String? {
-        cacheLock.lock()
-        let cached = cachedValue()
-        cacheLock.unlock()
-
-        if let cached, !cached.isEmpty {
-            return cached
-        }
-
-        let environment = ProcessInfo.processInfo.environment
-        for key in environmentKeys {
-            if let value = environment[key], !value.isEmpty {
-                cacheLock.lock()
-                cacheStore(value)
-                cacheLock.unlock()
-                return value
-            }
+        if let available = readCachedOrEnvironmentAPIKey(
+            cachedValue: cachedValue,
+            cacheStore: cacheStore,
+            environmentKeys: environmentKeys
+        ) {
+            return available
         }
 
         var item: CFTypeRef?
@@ -120,6 +118,32 @@ enum CredentialStore {
         cacheStore(key)
         cacheLock.unlock()
         return key
+    }
+
+    private static func readCachedOrEnvironmentAPIKey(
+        cachedValue: () -> String?,
+        cacheStore: (String) -> Void,
+        environmentKeys: [String]
+    ) -> String? {
+        cacheLock.lock()
+        let cached = cachedValue()
+        cacheLock.unlock()
+
+        if let cached, !cached.isEmpty {
+            return cached
+        }
+
+        let environment = ProcessInfo.processInfo.environment
+        for key in environmentKeys {
+            if let value = environment[key], !value.isEmpty {
+                cacheLock.lock()
+                cacheStore(value)
+                cacheLock.unlock()
+                return value
+            }
+        }
+
+        return nil
     }
 
     private static func hasAPIKey(

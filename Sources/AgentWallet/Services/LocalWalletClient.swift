@@ -13,19 +13,66 @@ struct LocalWalletAccount: Equatable {
     }
 }
 
+struct LocalWalletBalance: Equatable {
+    let chain: ChainProfile
+    let balanceWei: BigUInt
+    let updatedAt: Date
+
+    var hasGas: Bool {
+        balanceWei > 0
+    }
+
+    var formattedNativeBalance: String {
+        let divisor = BigUInt(10).power(18)
+        let whole = balanceWei / divisor
+        let remainder = balanceWei % divisor
+
+        var fraction = String(remainder + divisor).dropFirst()
+        fraction = fraction.prefix(6)
+        while fraction.last == "0" {
+            fraction = fraction.dropLast()
+        }
+
+        if fraction.isEmpty {
+            return "\(whole) \(chain.nativeTokenSymbol)"
+        }
+
+        return "\(whole).\(fraction) \(chain.nativeTokenSymbol)"
+    }
+}
+
 struct LocalWalletClient {
     private static let service = "AgentWallet.LocalPrivateKey"
+    private static let addressService = "AgentWallet.LocalWalletAddress"
     private static let account = "default"
 
     func loadAccount() throws -> LocalWalletAccount? {
+        if let address = try readAccountAddress() {
+            return LocalWalletAccount(address: address, createdAt: Date())
+        }
+
+        if privateKeyItemExists() {
+            throw LocalWalletError.walletNeedsUnlock
+        }
+
+        return nil
+    }
+
+    func unlockWallet() throws -> LocalWalletAccount? {
         guard let privateKey = try readPrivateKey() else {
             return nil
         }
 
-        return LocalWalletAccount(address: try Self.address(from: privateKey), createdAt: Date())
+        let address = try Self.address(from: privateKey)
+        try saveAccountAddress(address)
+        return LocalWalletAccount(address: address, createdAt: Date())
     }
 
     func createWallet() throws -> LocalWalletAccount {
+        guard try readPrivateKey() == nil else {
+            throw LocalWalletError.walletAlreadyExists
+        }
+
         for _ in 0..<32 {
             var bytes = [UInt8](repeating: 0, count: 32)
             let status = SecRandomCopyBytes(kSecRandomDefault, bytes.count, &bytes)
@@ -37,6 +84,7 @@ struct LocalWalletClient {
             if let publicKey = Utilities.privateToPublic(privateKey),
                let address = Utilities.publicToAddress(publicKey)?.address {
                 try savePrivateKey(privateKey)
+                try saveAccountAddress(address)
                 return LocalWalletAccount(address: address, createdAt: Date())
             }
         }
@@ -45,16 +93,42 @@ struct LocalWalletClient {
     }
 
     func importWallet(privateKeyHex: String) throws -> LocalWalletAccount {
+        guard try readPrivateKey() == nil else {
+            throw LocalWalletError.walletAlreadyExists
+        }
+
         let privateKey = try Self.privateKeyData(from: privateKeyHex)
         let address = try Self.address(from: privateKey)
         try savePrivateKey(privateKey)
+        try saveAccountAddress(address)
         return LocalWalletAccount(address: address, createdAt: Date())
     }
 
-    @discardableResult
-    func deleteWallet() -> Bool {
-        let status = SecItemDelete(Self.baseQuery() as CFDictionary)
-        return status == errSecSuccess || status == errSecItemNotFound
+    func deleteWallet() throws {
+        try deleteItem(query: Self.privateKeyQuery())
+        try deleteItem(query: Self.addressQuery())
+    }
+
+    func fetchNativeBalance(
+        for account: LocalWalletAccount,
+        chain: ChainProfile
+    ) async throws -> LocalWalletBalance {
+        guard let rpcURL = chain.rpcURL else {
+            throw LocalWalletError.missingRPCURL(chain.displayName)
+        }
+
+        guard let address = EthereumAddress(account.address, ignoreChecksum: true) else {
+            throw LocalWalletError.invalidTransaction
+        }
+
+        let provider = try await Web3HttpProvider(
+            url: rpcURL,
+            network: .Custom(networkID: BigUInt(chain.chainID)),
+            keystoreManager: nil
+        )
+        let web3 = Web3(provider: provider)
+        let balance = try await web3.eth.getBalance(for: address, onBlock: .latest)
+        return LocalWalletBalance(chain: chain, balanceWei: balance, updatedAt: Date())
     }
 
     func signAndBroadcast(
@@ -135,7 +209,7 @@ struct LocalWalletClient {
 
     private func readPrivateKey() throws -> Data? {
         var item: CFTypeRef?
-        var query = Self.baseQuery()
+        var query = Self.privateKeyQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -165,7 +239,7 @@ struct LocalWalletClient {
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        let updateStatus = SecItemUpdate(Self.baseQuery() as CFDictionary, updateAttributes as CFDictionary)
+        let updateStatus = SecItemUpdate(Self.privateKeyQuery() as CFDictionary, updateAttributes as CFDictionary)
         if updateStatus == errSecSuccess {
             return
         }
@@ -174,7 +248,7 @@ struct LocalWalletClient {
             throw LocalWalletError.keychainStatus(updateStatus)
         }
 
-        var addQuery = Self.baseQuery()
+        var addQuery = Self.privateKeyQuery()
         addQuery[kSecValueData as String] = privateKey
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
@@ -184,10 +258,86 @@ struct LocalWalletClient {
         }
     }
 
-    private static func baseQuery() -> [String: Any] {
+    private func readAccountAddress() throws -> String? {
+        var item: CFTypeRef?
+        var query = Self.addressQuery()
+        query[kSecReturnData as String] = true
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+
+        let status = SecItemCopyMatching(query as CFDictionary, &item)
+        if status == errSecItemNotFound {
+            return nil
+        }
+
+        guard status == errSecSuccess else {
+            throw LocalWalletError.keychainStatus(status)
+        }
+
+        guard let data = item as? Data,
+              let address = String(data: data, encoding: .utf8),
+              QueryClassifier.isAddress(address) else {
+            throw LocalWalletError.invalidTransaction
+        }
+
+        return address
+    }
+
+    private func saveAccountAddress(_ address: String) throws {
+        guard QueryClassifier.isAddress(address),
+              let data = address.data(using: .utf8) else {
+            throw LocalWalletError.invalidTransaction
+        }
+
+        let updateAttributes: [String: Any] = [
+            kSecValueData as String: data,
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+
+        let updateStatus = SecItemUpdate(Self.addressQuery() as CFDictionary, updateAttributes as CFDictionary)
+        if updateStatus == errSecSuccess {
+            return
+        }
+
+        guard updateStatus == errSecItemNotFound else {
+            throw LocalWalletError.keychainStatus(updateStatus)
+        }
+
+        var addQuery = Self.addressQuery()
+        addQuery[kSecValueData as String] = data
+        addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
+
+        let addStatus = SecItemAdd(addQuery as CFDictionary, nil)
+        guard addStatus == errSecSuccess else {
+            throw LocalWalletError.keychainStatus(addStatus)
+        }
+    }
+
+    private func privateKeyItemExists() -> Bool {
+        var query = Self.privateKeyQuery()
+        query[kSecReturnData as String] = false
+        query[kSecMatchLimit as String] = kSecMatchLimitOne
+        return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
+    }
+
+    private func deleteItem(query: [String: Any]) throws {
+        let status = SecItemDelete(query as CFDictionary)
+        guard status == errSecSuccess || status == errSecItemNotFound else {
+            throw LocalWalletError.keychainStatus(status)
+        }
+    }
+
+    private static func privateKeyQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+    }
+
+    private static func addressQuery() -> [String: Any] {
+        [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: addressService,
             kSecAttrAccount as String: account
         ]
     }
@@ -277,6 +427,8 @@ struct LocalWalletClient {
 
 enum LocalWalletError: LocalizedError {
     case walletNotFound
+    case walletAlreadyExists
+    case walletNeedsUnlock
     case invalidPrivateKey
     case invalidTransaction
     case missingRPCURL(String)
@@ -290,6 +442,10 @@ enum LocalWalletError: LocalizedError {
         switch self {
         case .walletNotFound:
             "请先创建或导入本地钱包。"
+        case .walletAlreadyExists:
+            "当前已经有本地钱包。为避免覆盖私钥，请先确认备份并删除旧钱包后再创建或导入。"
+        case .walletNeedsUnlock:
+            "检测到旧版本地私钥，但还没有公开地址记录。请点击“解锁已有钱包”完成一次迁移。"
         case .invalidPrivateKey:
             "私钥无效。请输入 32 字节的 EVM 私钥十六进制字符串。"
         case .invalidTransaction:

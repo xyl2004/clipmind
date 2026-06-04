@@ -6,7 +6,7 @@ struct ContentView: View {
     var body: some View {
         HStack(spacing: 0) {
             SidebarView(store: store)
-                .frame(width: 282)
+                .frame(width: 300)
 
             VStack(spacing: 0) {
                 QueryComposerView(store: store)
@@ -26,7 +26,9 @@ struct ContentView: View {
                             )
                         }
 
-                        ContextChatView(store: store)
+                        if shouldShowContextChat {
+                            ContextChatView(store: store)
+                        }
 
                         if let result = store.result {
                             ResearchResultView(
@@ -51,5 +53,10 @@ struct ContentView: View {
         }
         .background(AppTheme.background)
         .foregroundStyle(AppTheme.primaryText)
+    }
+
+    private var shouldShowContextChat: Bool {
+        !store.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || !store.chatMessages.isEmpty
     }
 }

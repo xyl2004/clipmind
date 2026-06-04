@@ -7,8 +7,6 @@ struct ContextChatView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
 
-            contextPreview
-
             if !store.chatMessages.isEmpty {
                 VStack(alignment: .leading, spacing: 10) {
                     ForEach(store.chatMessages) { message in
@@ -54,6 +52,13 @@ struct ContextChatView: View {
                     .foregroundStyle(.orange)
                     .textSelection(.enabled)
             }
+
+            if let contextDetailErrorMessage = store.contextDetailErrorMessage {
+                Label(contextDetailErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .textSelection(.enabled)
+            }
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
         .productPanel(padding: 16)
@@ -61,35 +66,15 @@ struct ContextChatView: View {
 
     private var header: some View {
         HStack {
-            Label("上下文对话", systemImage: "text.bubble")
+            Label("追问当前内容", systemImage: "text.bubble")
                 .font(.headline)
 
             Spacer()
 
-            Label("⌃⌥W 读取选中文字", systemImage: "keyboard")
-                .font(.caption)
-                .foregroundStyle(.secondary)
-        }
-    }
-
-    private var contextPreview: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("当前上下文")
-                .font(.caption)
-                .foregroundStyle(AppTheme.mutedText)
-
-            Text(store.input.isEmpty ? "还没有上下文。选中文字后按快捷键，或直接在上方输入框粘贴内容。" : store.input)
-                .font(.system(.callout, design: .monospaced))
-                .foregroundStyle(store.input.isEmpty ? AppTheme.mutedText : AppTheme.primaryText)
-                .lineLimit(4)
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(Color.black.opacity(0.04), in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(AppTheme.border, lineWidth: 1)
-                )
+            if store.isLoadingContextDetails {
+                ProgressView()
+                    .controlSize(.small)
+            }
         }
     }
 }

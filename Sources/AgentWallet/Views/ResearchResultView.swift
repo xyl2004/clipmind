@@ -8,6 +8,7 @@ struct ResearchResultView: View {
     let llmErrorMessage: String?
     let onRefreshExplanation: () -> Void
     @State private var showsRawJSON = false
+    @State private var showsDiagnostics = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
@@ -35,31 +36,35 @@ struct ResearchResultView: View {
                 }
             }
 
-            TradeIntentView(store: store, query: snapshot.query)
+            if snapshot.kind == .token {
+                TradeIntentView(store: store, query: snapshot.query)
+            }
 
-            DisclosureGroup("Surf 命令", isExpanded: .constant(true)) {
-                VStack(alignment: .leading, spacing: 8) {
-                    ForEach(snapshot.commands) { command in
-                        HStack {
-                            Image(systemName: command.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
-                                .foregroundStyle(command.succeeded ? .green : .red)
-                            Text(command.command)
-                                .font(.system(.caption, design: .monospaced))
-                            Spacer()
-                            Text(command.summary)
-                                .foregroundStyle(.secondary)
-                                .font(.caption)
+            DisclosureGroup("调试信息", isExpanded: $showsDiagnostics) {
+                VStack(alignment: .leading, spacing: 12) {
+                    VStack(alignment: .leading, spacing: 8) {
+                        ForEach(snapshot.commands) { command in
+                            HStack {
+                                Image(systemName: command.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                    .foregroundStyle(command.succeeded ? .green : .red)
+                                Text(command.command)
+                                    .font(.system(.caption, design: .monospaced))
+                                Spacer()
+                                Text(command.summary)
+                                    .foregroundStyle(.secondary)
+                                    .font(.caption)
+                            }
                         }
+                    }
+
+                    DisclosureGroup("原始 JSON", isExpanded: $showsRawJSON) {
+                        Text(snapshot.rawJSON)
+                            .font(.system(.caption, design: .monospaced))
+                            .textSelection(.enabled)
+                            .padding(.top, 8)
                     }
                 }
                 .padding(.top, 8)
-            }
-
-            DisclosureGroup("原始 JSON", isExpanded: $showsRawJSON) {
-                Text(snapshot.rawJSON)
-                    .font(.system(.caption, design: .monospaced))
-                    .textSelection(.enabled)
-                    .padding(.top, 8)
             }
         }
     }

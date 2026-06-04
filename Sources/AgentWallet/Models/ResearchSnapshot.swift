@@ -48,6 +48,22 @@ struct SurfCommandSummary: Identifiable {
     var id: String { command }
 }
 
+struct TradeHistoryItem: Identifiable {
+    let id = UUID()
+    let hash: String
+    let chain: ChainProfile
+    let action: String
+    let createdAt = Date()
+
+    var shortHash: String {
+        JSONPrettyPrinter.shortAddress(hash)
+    }
+
+    var explorerURL: URL? {
+        URL(string: "\(chain.explorerTransactionURLPrefix)/\(hash)")
+    }
+}
+
 struct ContextChatMessage: Identifiable {
     let id = UUID()
     let role: ContextChatRole

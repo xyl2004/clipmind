@@ -59,6 +59,20 @@ enum ChainRegistry {
         )
     )
 
+    static let ethereumSepolia = ChainProfile(
+        id: "ethereum-sepolia",
+        chainID: 11_155_111,
+        displayName: "Ethereum Sepolia",
+        shortName: "Sepolia",
+        surfSlug: "sepolia",
+        explorerBaseURL: URL(string: "https://sepolia.etherscan.io")!,
+        defaultRPCURL: URL(string: "https://ethereum-sepolia-rpc.publicnode.com")!,
+        rpcEnvironmentKey: "AGENTWALLET_RPC_ETHEREUM_SEPOLIA",
+        nativeTokenSymbol: "ETH",
+        supportsSwap: true,
+        defaultSpendToken: .nativeETH
+    )
+
     static let base = ChainProfile(
         id: "base",
         chainID: 8453,

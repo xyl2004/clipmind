@@ -3,7 +3,6 @@ import SwiftUI
 struct TradeIntentView: View {
     @ObservedObject var store: AppStore
     let query: String
-    @State private var mode: TradeMode = .swap
 
     private var chain: ChainProfile {
         store.selectedTradeChain
@@ -13,14 +12,8 @@ struct TradeIntentView: View {
         VStack(alignment: .leading, spacing: 16) {
             header
 
-            localWalletPanel
-
-            if mode == .swap {
-                swapComposer
-                confirmationPanel
-            } else {
-                transferPlaceholder
-            }
+            swapComposer
+            confirmationPanel
         }
         .productPanel(padding: 16)
     }
@@ -32,99 +25,10 @@ struct TradeIntentView: View {
 
             Spacer()
 
-            Picker("模式", selection: $mode) {
-                ForEach(TradeMode.allCases) { mode in
-                    Text(mode.title).tag(mode)
-                }
-            }
-            .pickerStyle(.segmented)
-            .frame(width: 220)
-            .colorScheme(.light)
-        }
-    }
-
-    private var localWalletPanel: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(alignment: .firstTextBaseline) {
-                Label("本地钱包", systemImage: "lock.shield")
-                    .font(.callout.weight(.semibold))
-                Spacer()
-                Text(store.signerStatusTitle)
-                    .font(.system(.caption, design: .monospaced))
-                    .foregroundStyle(store.localWalletAccount == nil ? AppTheme.mutedText : AppTheme.accent)
-            }
-
-            if let account = store.localWalletAccount {
-                HStack(spacing: 10) {
-                    Text(account.address)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(AppTheme.primaryText)
-                        .textSelection(.enabled)
-                        .lineLimit(1)
-                        .padding(10)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(AppTheme.border, lineWidth: 1)
-                        )
-
-                    Button {
-                        store.reloadLocalWallet()
-                    } label: {
-                        Label("刷新", systemImage: "arrow.clockwise")
-                    }
-                    .buttonStyle(ProductButtonStyle())
-
-                    Button(role: .destructive) {
-                        store.deleteLocalWallet()
-                    } label: {
-                        Label("删除", systemImage: "trash")
-                    }
-                    .buttonStyle(ProductButtonStyle())
-                }
-            } else {
-                HStack(spacing: 10) {
-                    SecureField("导入 0x 私钥，或直接创建新钱包", text: $store.privateKeyDraft)
-                        .textFieldStyle(.plain)
-                        .font(.system(.callout, design: .monospaced))
-                        .foregroundStyle(AppTheme.primaryText)
-                        .colorScheme(.light)
-                        .tint(AppTheme.accent)
-                        .padding(10)
-                        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                        .overlay(
-                            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                                .stroke(AppTheme.border, lineWidth: 1)
-                        )
-
-                    Button {
-                        store.createLocalWallet()
-                    } label: {
-                        Label("创建", systemImage: "plus.circle")
-                    }
-                    .buttonStyle(ProductButtonStyle(prominent: true))
-
-                    Button {
-                        store.importLocalWallet()
-                    } label: {
-                        Label("导入", systemImage: "square.and.arrow.down")
-                    }
-                    .buttonStyle(ProductButtonStyle())
-                    .disabled(store.privateKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-                }
-            }
-
-            Text(store.walletStatusMessage ?? "私钥仅保存到 macOS Keychain。AI 不能读取私钥，也不会自动签名；只有你点击确认按钮才会本机签名广播。")
+            Label(store.localWalletAccount == nil ? "请先在左侧栏创建或导入钱包" : store.signerStatusTitle, systemImage: "lock.shield")
                 .font(.caption)
-                .foregroundStyle(AppTheme.mutedText)
+                .foregroundStyle(store.localWalletAccount == nil ? AppTheme.mutedText : AppTheme.accent)
         }
-        .padding(12)
-        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12, style: .continuous)
-                .stroke(AppTheme.border, lineWidth: 1)
-        )
     }
 
     private var swapComposer: some View {
@@ -221,25 +125,14 @@ struct TradeIntentView: View {
                     IntentRow(label: "预计收到", value: plan.outputAmount ?? "等待 Uniswap 返回")
                     IntentRow(label: "Gas 预估", value: plan.gasFee ?? "未返回")
                     IntentRow(label: "授权", value: plan.needsApproval ? "需要先授权" : "无需额外授权")
+                    IntentRow(label: "报价有效期", value: plan.quoteFreshnessStatus)
                     if let swap = plan.swapTransaction {
                         IntentRow(label: "Swap To", value: swap.shortTo)
                     }
                 }
 
-                HStack {
-                    Button {
-                        Task {
-                            await store.signAndBroadcastTrade()
-                        }
-                    } label: {
-                        Label(plan.needsApproval ? "本机签名授权" : "本机签名兑换", systemImage: "signature")
-                    }
-                    .buttonStyle(ProductButtonStyle(prominent: true))
-
-                    Text(plan.needsApproval ? "需要先授权。授权上链后重新生成报价再兑换。" : "AI 不会签名。请只确认你看懂的交易。")
-                        .font(.caption)
-                        .foregroundStyle(AppTheme.mutedText)
-                }
+                TradeSafetyChecklist(checks: plan.safetyChecks)
+                TradeSigningGate(store: store, plan: plan)
             }
             .padding(12)
             .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -264,14 +157,6 @@ struct TradeIntentView: View {
         }
     }
 
-    private var transferPlaceholder: some View {
-        Text("转账会复用同一个本地签名确认边界；当前版本先实现 Uniswap 同链 swap。")
-            .font(.caption)
-            .foregroundStyle(AppTheme.mutedText)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .padding(12)
-            .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-    }
 }
 
 private struct TradeField: View {
@@ -316,18 +201,94 @@ private struct IntentRow: View {
     }
 }
 
-private enum TradeMode: String, CaseIterable, Identifiable {
-    case swap
-    case transfer
+private struct TradeSafetyChecklist: View {
+    let checks: [String]
 
-    var id: String { rawValue }
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            Label("安全检查", systemImage: "checkmark.seal")
+                .font(.caption.weight(.semibold))
+                .foregroundStyle(AppTheme.accent)
 
-    var title: String {
-        switch self {
-        case .swap:
-            "兑换"
-        case .transfer:
-            "转账"
+            ForEach(checks, id: \.self) { check in
+                Label(check, systemImage: "checkmark.circle")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
+    }
+}
+
+private struct TradeSigningGate: View {
+    @ObservedObject var store: AppStore
+    let plan: UniswapTradePlan
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let isFresh = plan.isFresh(at: context.date)
+            let expectedCode = plan.confirmationCode
+            let confirmationMatches = store.tradeConfirmationText
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .uppercased() == expectedCode
+            let canSign = isFresh && confirmationMatches && !store.isSigningTrade
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .bottom, spacing: 10) {
+                    VStack(alignment: .leading, spacing: 6) {
+                        Text("签名前确认")
+                            .font(.caption)
+                            .foregroundStyle(AppTheme.mutedText)
+
+                        TextField(expectedCode, text: $store.tradeConfirmationText)
+                            .textFieldStyle(.plain)
+                            .font(.system(.callout, design: .monospaced))
+                            .foregroundStyle(AppTheme.primaryText)
+                            .colorScheme(.light)
+                            .tint(AppTheme.accent)
+                            .padding(10)
+                            .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(
+                                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .stroke(confirmationMatches ? AppTheme.accent.opacity(0.55) : AppTheme.border, lineWidth: 1)
+                            )
+                    }
+                    .frame(width: 140)
+
+                    Button {
+                        Task {
+                            await store.signAndBroadcastTrade()
+                        }
+                    } label: {
+                        if store.isSigningTrade {
+                            ProgressView()
+                                .controlSize(.small)
+                                .frame(minWidth: 112)
+                        } else {
+                            Label(plan.needsApproval ? "本机签名授权" : "本机签名兑换", systemImage: "signature")
+                        }
+                    }
+                    .buttonStyle(ProductButtonStyle(prominent: true))
+                    .disabled(!canSign)
+
+                    Text(statusText(isFresh: isFresh, expectedCode: expectedCode))
+                        .font(.caption)
+                        .foregroundStyle(isFresh ? AppTheme.mutedText : .orange)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+        }
+    }
+
+    private func statusText(isFresh: Bool, expectedCode: String) -> String {
+        if !isFresh {
+            return "报价已过期，请重新生成后再签名。"
+        }
+
+        if plan.needsApproval {
+            return "输入钱包后 4 位 \(expectedCode) 后，只会签名授权；授权上链后需重新生成报价再兑换。"
+        }
+
+        return "输入钱包后 4 位 \(expectedCode) 后才会本机签名。AI 不会自动签名或广播。"
     }
 }

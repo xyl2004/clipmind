@@ -4,222 +4,72 @@ struct QueryComposerView: View {
     @ObservedObject var store: AppStore
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(spacing: 12) {
-                    KindSegmentedControl(selection: $store.selectedKind)
-                        .frame(width: 460)
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .top, spacing: 10) {
+                TextField("粘贴地址、合约、交易哈希、项目名或一段 Web3 内容", text: $store.input, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(.system(.body, design: .monospaced))
+                    .foregroundStyle(AppTheme.primaryText)
+                    .colorScheme(.light)
+                    .tint(AppTheme.accent)
+                    .padding(12)
+                    .lineLimit(1...4)
+                    .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 10, style: .continuous)
+                            .stroke(AppTheme.border, lineWidth: 1)
+                    )
 
-                    Spacer()
-
-                    Button {
-                        store.captureClipboard()
-                    } label: {
-                        Label("剪贴板", systemImage: "doc.on.clipboard")
+                Button {
+                    performPrimaryAction()
+                } label: {
+                    if store.isLoading {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Label(primaryActionTitle, systemImage: primaryActionIcon)
                     }
-                    .buttonStyle(ProductButtonStyle())
-
-                    Button {
-                        store.captureSelectedText()
-                    } label: {
-                        Label("选中文字", systemImage: "text.viewfinder")
-                    }
-                    .buttonStyle(ProductButtonStyle())
-
-                    Button {
-                        Task {
-                            await store.runResearch()
-                        }
-                    } label: {
-                        if store.isLoading {
-                            ProgressView()
-                                .controlSize(.small)
-                        } else {
-                            Label("查询", systemImage: "magnifyingglass")
-                        }
-                    }
-                    .buttonStyle(ProductButtonStyle(prominent: true))
-                    .disabled(store.isLoading)
-                    .keyboardShortcut(.return, modifiers: [.command])
                 }
-
-                ChainSegmentedControl(store: store)
+                .buttonStyle(ProductButtonStyle(prominent: true))
+                .disabled(store.isLoading)
+                .keyboardShortcut(.return, modifiers: [.command])
+                .padding(.top, 1)
             }
-
-            TextField("粘贴 EVM 地址、代币合约、交易哈希或项目名称", text: $store.input, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(.system(.body, design: .monospaced))
-                .foregroundStyle(AppTheme.primaryText)
-                .colorScheme(.light)
-                .tint(AppTheme.accent)
-                .padding(12)
-                .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(AppTheme.border, lineWidth: 1)
-                )
-
-            HStack(spacing: 8) {
-                Label("当前模式：\(store.effectiveKind.title)", systemImage: store.effectiveKind.systemImage)
-                Text(store.selectedChainFilter.isAutomatic ? "自动多链" : store.selectedTradeChain.displayName)
-                Text("Surf 实时数据")
-                Text("Uniswap 交易")
-            }
-            .font(.caption)
-            .foregroundStyle(AppTheme.mutedText)
 
             if let selectedTextMessage = store.selectedTextMessage {
                 Label(selectedTextMessage, systemImage: "checkmark.circle")
                     .font(.caption)
                     .foregroundStyle(.green)
             }
-
-            LLMSettingsInlineView(store: store)
         }
         .padding(20)
         .background(Color.black.opacity(0.035))
     }
-}
 
-private struct KindSegmentedControl: View {
-    @Binding var selection: QueryKind
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(QueryKind.allCases) { kind in
-                Button {
-                    selection = kind
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: kind.systemImage)
-                            .font(.system(size: 12, weight: .semibold))
-                        Text(kind.title)
-                            .font(.system(size: 13, weight: .semibold))
-                    }
-                    .foregroundStyle(selection == kind ? AppTheme.primaryText : AppTheme.mutedText)
-                    .frame(maxWidth: .infinity, minHeight: 30)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(selection == kind ? Color.white.opacity(0.76) : Color.clear)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(selection == kind ? AppTheme.border : Color.clear, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(AppTheme.border, lineWidth: 1)
-        )
+    private var hasInput: Bool {
+        !store.input.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     }
-}
 
-private struct ChainSegmentedControl: View {
-    @ObservedObject var store: AppStore
-
-    var body: some View {
-        HStack(spacing: 4) {
-            ForEach(ChainFilter.all) { filter in
-                Button {
-                    store.selectChain(filter)
-                } label: {
-                    HStack(spacing: 5) {
-                        Image(systemName: filter.systemImage)
-                            .font(.system(size: 11, weight: .semibold))
-                        Text(filter.title)
-                            .font(.system(size: 12, weight: .semibold))
-                    }
-                    .foregroundStyle(store.selectedChainID == filter.id ? AppTheme.primaryText : AppTheme.mutedText)
-                    .frame(maxWidth: .infinity, minHeight: 28)
-                    .background(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .fill(store.selectedChainID == filter.id ? Color.white.opacity(0.76) : Color.clear)
-                    )
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(store.selectedChainID == filter.id ? AppTheme.border : Color.clear, lineWidth: 1)
-                    )
-                }
-                .buttonStyle(.plain)
-            }
-        }
-        .padding(4)
-        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-        .overlay(
-            RoundedRectangle(cornerRadius: 10, style: .continuous)
-                .stroke(AppTheme.border, lineWidth: 1)
-        )
+    private var primaryActionTitle: String {
+        hasInput ? "查询" : "读取选中内容"
     }
-}
 
-private struct LLMSettingsInlineView: View {
-    @ObservedObject var store: AppStore
+    private var primaryActionIcon: String {
+        hasInput ? "magnifyingglass" : "text.viewfinder"
+    }
 
-    var body: some View {
-        HStack(spacing: 10) {
-            Label("AI / Uniswap", systemImage: "brain")
-                .foregroundStyle(store.hasLLMAPIKey && store.hasUniswapAPIKey ? .green : .secondary)
-
-            if store.hasLLMAPIKey {
-                Text("DeepSeek V4 Flash 已启用")
-                    .foregroundStyle(.secondary)
-            } else {
-                SecureField("B.AI API Key", text: $store.apiKeyDraft)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(AppTheme.primaryText)
-                    .colorScheme(.light)
-                    .tint(AppTheme.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .frame(width: 260)
-
-                Button {
-                    store.saveAPIKey()
-                } label: {
-                    Label("保存", systemImage: "key")
-                }
-                .buttonStyle(ProductButtonStyle())
-                .disabled(store.apiKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+    private func performPrimaryAction() {
+        if hasInput {
+            Task {
+                await store.runResearch()
             }
-
-            if store.hasUniswapAPIKey {
-                Text("Uniswap API 已启用")
-                    .foregroundStyle(.secondary)
-            } else {
-                SecureField("Uniswap API Key", text: $store.uniswapAPIKeyDraft)
-                    .textFieldStyle(.plain)
-                    .foregroundStyle(AppTheme.primaryText)
-                    .colorScheme(.light)
-                    .tint(AppTheme.accent)
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 7)
-                    .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .frame(width: 220)
-
-                Button {
-                    store.saveUniswapAPIKey()
-                } label: {
-                    Label("保存", systemImage: "key")
-                }
-                .buttonStyle(ProductButtonStyle())
-                .disabled(store.uniswapAPIKeyDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
-            }
-
-            if let status = store.apiKeyStatusMessage ?? store.uniswapAPIKeyStatusMessage {
-                Text(status)
-                    .foregroundStyle(.secondary)
-                    .lineLimit(1)
-            }
-
-            Spacer()
+            return
         }
-        .font(.caption)
-        .foregroundStyle(AppTheme.mutedText)
+
+        if store.captureSelectedText() {
+            Task {
+                await store.preloadContextDetailsIfUseful()
+            }
+        }
     }
 }

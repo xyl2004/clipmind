@@ -4,7 +4,12 @@ import SwiftUI
 @main
 struct AgentWalletApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
-    @StateObject private var appStore = AppStore()
+    @StateObject private var appStore: AppStore
+
+    init() {
+        AgentWalletDiagnostics.runIfRequested()
+        _appStore = StateObject(wrappedValue: AppStore())
+    }
 
     var body: some Scene {
         WindowGroup("AgentWallet", id: "main") {
