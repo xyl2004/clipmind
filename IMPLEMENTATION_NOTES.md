@@ -34,6 +34,7 @@
 16. 接入 Uniswap Trading API，第一版使用 `/check_approval`、`/quote`、`/swap` 生成同链 swap 确认单。
 17. 接入本地钱包第一版：支持创建/导入 EVM 私钥，私钥保存到 macOS Keychain，本机 secp256k1 签名并通过对应链 RPC 广播。
 18. 增加本地钱包私钥导出入口：用户输入地址后 4 位确认后，才会短时显示私钥，并可复制后自动隐藏。
+19. 接入 LLM 结构化意图分类器（StructuredIntent + IntentClassifier）。LLM 先输出 JSON，失败时退到 WalletIntentParser 规则解析。新增 4 个只读 check_* 动作（check_balance / check_address / check_token / check_tx），自动驱动钱包余额或 Surf 链上查询。`CLIPMIND_INTENT_BACKEND=rule` 可强制关闭 LLM 分类，`=llm` 同样总是先调 LLM。
 
 ## 数据查询能力
 
