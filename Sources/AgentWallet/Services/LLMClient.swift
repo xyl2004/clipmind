@@ -51,6 +51,14 @@ struct LLMClient {
         return try await sendChat(messages: messages, temperature: 0.25, maxTokens: 900)
     }
 
+    func classifyChat(system: String, user: String) async throws -> String {
+        let messages: [[String: Any]] = [
+            ["role": "system", "content": system],
+            ["role": "user", "content": user]
+        ]
+        return try await sendChat(messages: messages, temperature: 0.0, maxTokens: 220)
+    }
+
     private func sendChat(
         messages: [[String: Any]],
         temperature: Double,
@@ -276,3 +284,6 @@ enum LLMClientError: LocalizedError {
         }
     }
 }
+
+extension LLMClient: IntentClassifierBackend {}
+
