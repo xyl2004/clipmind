@@ -9,6 +9,7 @@ enum CoreSelfTests {
         try testWalletIntentParser(&suite)
         try testStructuredIntentTypes(&suite)
         try testStructuredIntentAdapter(&suite)
+        try await testIntentClassifierStub(&suite)
         try testTransferPlanBuilder(&suite)
         try testTransactionSafety(&suite)
         try testTradeIntentDraft(&suite)
@@ -269,6 +270,23 @@ enum CoreSelfTests {
                 "adapter returns nil for \(action.rawValue)"
             )
         }
+    }
+
+    private static func testIntentClassifierStub(_ suite: inout CoreSelfTestSuite) async throws {
+        let goodJSON = """
+        {"action":"transfer","chain":"base","target_address":"0x2222222222222222222222222222222222222222","target_query":"","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":null,"unsupported_reason":""}
+        """
+        let stub = StubIntentClassifierBackend(responses: [.success(goodJSON)])
+        let classifier = IntentClassifier(backend: stub)
+
+        let result = try await classifier.classify(
+            selectedContext: "0x2222222222222222222222222222222222222222",
+            previousIntent: nil,
+            chainHint: "base",
+            question: "给这个地址转 5 USDC"
+        )
+        try suite.equal(result.action, StructuredIntentAction.transfer, "classifier returns parsed intent")
+        try suite.equal(stub.callCount, 1, "classifier called backend exactly once on happy path")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {
