@@ -307,6 +307,25 @@ enum CoreSelfTests {
             badThenGood.lastUsers.last?.contains("Your previous output was rejected") == true,
             "retry payload includes rejection feedback"
         )
+
+        let alwaysBad = StubIntentClassifierBackend(responses: [
+            .success("not json"),
+            .success("still not json")
+        ])
+        let exhaustClassifier = IntentClassifier(backend: alwaysBad)
+        var thrown: Error?
+        do {
+            _ = try await exhaustClassifier.classify(
+                selectedContext: "anything",
+                previousIntent: nil,
+                chainHint: "base",
+                question: "?"
+            )
+        } catch {
+            thrown = error
+        }
+        try suite.check(thrown is IntentClassifierError, "classifier throws IntentClassifierError after retry exhausted")
+        try suite.equal(alwaysBad.callCount, 2, "classifier stops at one retry (two calls total)")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {
