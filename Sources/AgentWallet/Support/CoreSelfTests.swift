@@ -13,6 +13,7 @@ enum CoreSelfTests {
         try testIntentClassifierPrompt(&suite)
         try await testAppStoreIntentDispatch(&suite)
         try await testAppStoreCheckActions(&suite)
+        try await testAppStoreIntentStatePreservation(&suite)
         try testTransferPlanBuilder(&suite)
         try testTransactionSafety(&suite)
         try testTradeIntentDraft(&suite)
@@ -458,6 +459,43 @@ enum CoreSelfTests {
         store3.chatQuestion = "这笔交易怎么样"
         await store3.askAboutSelectedContext()
         try suite.equal(store3.errorMessage, nil, "check_tx degraded path does not set errorMessage")
+    }
+
+    @MainActor
+    private static func testAppStoreIntentStatePreservation(_ suite: inout CoreSelfTestSuite) async throws {
+        let swapJSON = """
+        {"action":"swap","chain":"base","target_address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","target_query":"","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":null,"unsupported_reason":""}
+        """
+        let askJSON = """
+        {"action":"ask","chain":null,"target_address":"","target_query":"","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+        """
+        let unsupportedJSON = """
+        {"action":"unsupported","chain":null,"target_address":"","target_query":"","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":"NFT mint 暂未支持"}
+        """
+        let stub = StubIntentClassifierBackend(responses: [
+            .success(swapJSON),
+            .success(askJSON),
+            .success(unsupportedJSON)
+        ])
+        let store = AppStore(
+            intentClassifier: IntentClassifier(backend: stub),
+            intentBackendMode: .auto
+        )
+        store.input = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        store.chatQuestion = "用 5u 买这个"
+        await store.askAboutSelectedContext()
+        try suite.equal(store.floatingWalletIntent?.action, WalletIntentAction.swap, "initial swap intent set")
+        let swapID = store.floatingWalletIntent?.id
+
+        store.chatQuestion = "这个币背景是什么"
+        await store.askAboutSelectedContext()
+        try suite.equal(store.floatingWalletIntent?.action, WalletIntentAction.swap, "ask preserves swap intent")
+        try suite.equal(store.floatingWalletIntent?.id, swapID, "swap intent identity unchanged after ask")
+
+        store.chatQuestion = "我也想 mint 一个 NFT 给这个地址"
+        await store.askAboutSelectedContext()
+        try suite.equal(store.floatingWalletIntent?.action, WalletIntentAction.swap, "unsupported preserves swap intent")
+        try suite.equal(store.floatingWalletIntent?.id, swapID, "swap intent identity unchanged after unsupported")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {
