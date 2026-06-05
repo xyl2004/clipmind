@@ -2,6 +2,21 @@ import AppKit
 import BigInt
 import Foundation
 
+enum IntentBackendMode: String {
+    case auto
+    case rule
+    case llm
+
+    static func fromEnvironment(_ env: [String: String]) -> IntentBackendMode {
+        guard let raw = env["CLIPMIND_INTENT_BACKEND"]?.lowercased() else {
+            return .auto
+        }
+        return IntentBackendMode(rawValue: raw) ?? .auto
+    }
+
+    var skipsLLM: Bool { self == .rule }
+}
+
 @MainActor
 final class AppStore: ObservableObject {
     @Published var input: String = ""
@@ -67,18 +82,24 @@ final class AppStore: ObservableObject {
     private let llmClient: LLMClient
     private let tradeProvider: UniswapTradeProvider
     private let localWalletClient: LocalWalletClient
+    private let intentClassifier: IntentClassifier
+    private let intentBackendMode: IntentBackendMode
     private var selectedTextSourceRect: CGRect?
 
     init(
         surfClient: SurfClient = SurfClient(),
         llmClient: LLMClient = LLMClient(),
         tradeProvider: UniswapTradeProvider = UniswapTradeProvider(),
-        localWalletClient: LocalWalletClient = LocalWalletClient()
+        localWalletClient: LocalWalletClient = LocalWalletClient(),
+        intentClassifier: IntentClassifier? = nil,
+        intentBackendMode: IntentBackendMode? = nil
     ) {
         self.surfClient = surfClient
         self.llmClient = llmClient
         self.tradeProvider = tradeProvider
         self.localWalletClient = localWalletClient
+        self.intentClassifier = intentClassifier ?? IntentClassifier(backend: llmClient)
+        self.intentBackendMode = intentBackendMode ?? IntentBackendMode.fromEnvironment(ProcessInfo.processInfo.environment)
 
         do {
             localWalletAccount = try localWalletClient.loadAccount()
