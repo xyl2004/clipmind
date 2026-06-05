@@ -24,9 +24,9 @@
 - [x] commit
 
 ## Task 4 — JSON 拒绝非法字段
-- [ ] 加 5 条 `expectThrows`(unknown action / 坏 address / 坏 hash / 越界 chain / 非 JSON)
-- [ ] 跑测试,PASS(实现已就位,这步只锁契约)
-- [ ] commit
+- [x] 加 5 条 `expectThrows`(unknown action / 坏 address / 坏 hash / 越界 chain / 非 JSON)
+- [x] 跑测试,PASS(实现已就位,这步只锁契约)
+- [x] commit
 
 ## Task 5 — 适配器 `toWalletIntentDraft`
 - [ ] 新增 `testStructuredIntentAdapter`(transfer / swap / missing_fields / ask/check_*/unsupported 返 nil)

@@ -158,6 +158,34 @@ enum CoreSelfTests {
         let decodedTrailing = try StructuredIntent.decode(raw: trailingText)
         try suite.equal(decodedTrailing.action, StructuredIntentAction.unsupported, "decode strips trailing prose")
         try suite.equal(decodedTrailing.unsupportedReason, "Bridge 暂未支持", "decode keeps unsupported_reason")
+
+        try suite.expectThrows("decode rejects unknown action") {
+            _ = try StructuredIntent.decode(raw: """
+            {"action":"buy_nft","chain":"base","target_address":"","target_query":"","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+            """)
+        }
+
+        try suite.expectThrows("decode rejects bad target_address hex") {
+            _ = try StructuredIntent.decode(raw: """
+            {"action":"transfer","chain":"base","target_address":"0xnotvalid","target_query":"","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":null,"unsupported_reason":""}
+            """)
+        }
+
+        try suite.expectThrows("decode rejects bad transaction_hash") {
+            _ = try StructuredIntent.decode(raw: """
+            {"action":"check_tx","chain":"base","target_address":"","target_query":"","transaction_hash":"0xtoolittle","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+            """)
+        }
+
+        try suite.expectThrows("decode rejects unknown chain") {
+            _ = try StructuredIntent.decode(raw: """
+            {"action":"swap","chain":"solana","target_address":"","target_query":"doge","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":null,"unsupported_reason":""}
+            """)
+        }
+
+        try suite.expectThrows("decode rejects truly broken JSON") {
+            _ = try StructuredIntent.decode(raw: "not json at all")
+        }
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {
