@@ -287,6 +287,26 @@ enum CoreSelfTests {
         )
         try suite.equal(result.action, StructuredIntentAction.transfer, "classifier returns parsed intent")
         try suite.equal(stub.callCount, 1, "classifier called backend exactly once on happy path")
+
+        let badThenGood = StubIntentClassifierBackend(responses: [
+            .success("not json at all"),
+            .success("""
+            {"action":"swap","chain":"base","target_address":"","target_query":"doge","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":1.0,"unsupported_reason":""}
+            """)
+        ])
+        let retryClassifier = IntentClassifier(backend: badThenGood)
+        let retried = try await retryClassifier.classify(
+            selectedContext: "doge",
+            previousIntent: nil,
+            chainHint: "base",
+            question: "我想买 5u 这个代币"
+        )
+        try suite.equal(retried.action, StructuredIntentAction.swap, "classifier retries once on bad JSON")
+        try suite.equal(badThenGood.callCount, 2, "classifier called backend twice on retry path")
+        try suite.check(
+            badThenGood.lastUsers.last?.contains("Your previous output was rejected") == true,
+            "retry payload includes rejection feedback"
+        )
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {
