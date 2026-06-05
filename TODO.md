@@ -36,68 +36,68 @@
 - [x] commit
 
 ## Task 6 — `IntentClassifier` + `IntentClassifierBackend` + Stub
-- [ ] 新增 `testIntentClassifierStub`(快乐路径)
-- [ ] 跑测试,失败
-- [ ] 创建 `Sources/AgentWallet/Services/IntentClassifier.swift`(协议 + struct + retry + StubBackend + IntentClassifierError + 占位 IntentClassifierPrompt)
-- [ ] 跑测试,PASS
-- [ ] commit
+- [x] 新增 `testIntentClassifierStub`(快乐路径)
+- [x] 跑测试,失败
+- [x] 创建 `Sources/AgentWallet/Services/IntentClassifier.swift`(协议 + struct + retry + StubBackend + IntentClassifierError + 占位 IntentClassifierPrompt)
+- [x] 跑测试,PASS
+- [x] commit
 
 ## Task 7 — 重试 1 次
-- [ ] 追加测试:坏 JSON → 好 JSON,assert callCount=2 且重试 payload 含 "Your previous output was rejected"
-- [ ] 跑测试,PASS(实现已在 Task 6)
-- [ ] commit
+- [x] 追加测试:坏 JSON → 好 JSON,assert callCount=2 且重试 payload 含 "Your previous output was rejected"
+- [x] 跑测试,PASS(实现已在 Task 6)
+- [x] commit
 
 ## Task 8 — 重试用尽抛 `IntentClassifierError`
-- [ ] 追加测试:两次坏 JSON,assert 抛 `IntentClassifierError`,callCount=2
-- [ ] 跑测试,PASS
-- [ ] commit
+- [x] 追加测试:两次坏 JSON,assert 抛 `IntentClassifierError`,callCount=2
+- [x] 跑测试,PASS
+- [x] commit
 
 ## Task 9 — 真 `IntentClassifierPrompt`
-- [ ] 新增 `testIntentClassifierPrompt`(action 词覆盖 / chain 覆盖 / 首轮无 previous_intent 块 / 续轮有 / 超长截断)
-- [ ] 跑测试,失败(占位 systemPrompt 为空)
-- [ ] 创建 `Sources/AgentWallet/Support/IntentClassifierPrompt.swift`(system + 6 个 few-shot + payload builder + truncate + serializePreviousIntent)
-- [ ] 从 `IntentClassifier.swift` 删除占位 `IntentClassifierPrompt`
-- [ ] 跑测试,PASS
-- [ ] commit
+- [x] 新增 `testIntentClassifierPrompt`(action 词覆盖 / chain 覆盖 / 首轮无 previous_intent 块 / 续轮有 / 超长截断)
+- [x] 跑测试,失败(占位 systemPrompt 为空)
+- [x] 创建 `Sources/AgentWallet/Support/IntentClassifierPrompt.swift`(system + 6 个 few-shot + payload builder + truncate + serializePreviousIntent)
+- [x] 从 `IntentClassifier.swift` 删除占位 `IntentClassifierPrompt`
+- [x] 跑测试,PASS
+- [x] commit
 
 ## Task 10 — `LLMClient.classifyChat` 生产实现
-- [ ] 在 `LLMClient` 加 `classifyChat(system:user:)` 调 `sendChat(temperature: 0.0, maxTokens: 220)`
-- [ ] 加 `extension LLMClient: IntentClassifierBackend {}`
-- [ ] 跑 `swift build`,PASS
-- [ ] commit(本任务无单测,集成靠 Task 15 手动)
+- [x] 在 `LLMClient` 加 `classifyChat(system:user:)` 调 `sendChat(temperature: 0.0, maxTokens: 220)`
+- [x] 加 `extension LLMClient: IntentClassifierBackend {}`
+- [x] 跑 `swift build`,PASS
+- [x] commit(本任务无单测,集成靠 Task 15 手动)
 
 ## Task 11 — `AppStore` 注入 + flag
-- [ ] 加 `IntentBackendMode` enum(auto/rule/llm + `fromEnvironment`)
-- [ ] `AppStore.init` 加 `intentClassifier` 和 `intentBackendMode` 可注入参数(默认值不破坏现有调用方)
-- [ ] 跑 `swift build`,PASS
-- [ ] commit(无行为变化)
+- [x] 加 `IntentBackendMode` enum(auto/rule/llm + `fromEnvironment`)
+- [x] `AppStore.init` 加 `intentClassifier` 和 `intentBackendMode` 可注入参数(默认值不破坏现有调用方)
+- [x] 跑 `swift build`,PASS
+- [x] commit(无行为变化)
 
 ## Task 12 — `handleWalletIntentIfNeeded` LLM-first(transfer/swap/ask/unsupported)
-- [ ] 新增 `testAppStoreIntentDispatch`(LLM 成功 → swap intent / fallback → rule transfer / rule mode 不调 LLM)
-- [ ] 跑测试,失败
-- [ ] 重写 `handleWalletIntentIfNeeded` + 加 `dispatchStructuredIntent` 和 `dispatchRuleDraft`,check_* 暂时退化到 ask
-- [ ] 跑测试,PASS
-- [ ] commit
+- [x] 新增 `testAppStoreIntentDispatch`(LLM 成功 → swap intent / fallback → rule transfer / rule mode 不调 LLM)
+- [x] 跑测试,失败
+- [x] 重写 `handleWalletIntentIfNeeded` + 加 `dispatchStructuredIntent` 和 `dispatchRuleDraft`,check_* 暂时退化到 ask
+- [x] 跑测试,PASS
+- [x] commit
 
 ## Task 13 — `check_*` 分发 + 退化规则
-- [ ] 新增 `testAppStoreCheckActions`(check_balance 无钱包 / check_address 空地址有 query / check_tx 空 hash)
-- [ ] 跑测试,失败
-- [ ] 实现 `handleCheckBalance` + `buildBalanceSummary` + `handleCheckAddress` + `handleCheckToken` + `handleCheckTx` + `runCheckResearch`
-- [ ] 替换 `dispatchStructuredIntent` 的 check_* 分支
-- [ ] 跑测试,PASS
-- [ ] commit
+- [x] 新增 `testAppStoreCheckActions`(check_balance 无钱包 / check_address 空地址有 query / check_tx 空 hash)
+- [x] 跑测试,失败
+- [x] 实现 `handleCheckBalance` + `buildBalanceSummary` + `handleCheckAddress` + `handleCheckToken` + `handleCheckTx` + `runCheckResearch`
+- [x] 替换 `dispatchStructuredIntent` 的 check_* 分支
+- [x] 跑测试,PASS
+- [x] commit
 
 ## Task 14 — 状态保留(ask/check_*/unsupported 不清意图)
-- [ ] 新增 `testAppStoreIntentStatePreservation`(swap → ask → unsupported,assert 意图 id 不变)
-- [ ] 跑测试
-- [ ] 如有失败,审计 `dispatchStructuredIntent` 的 .unsupported / check_* 分支,确保不调 `resetFloatingWalletAction`
-- [ ] 跑测试,PASS
-- [ ] commit(改了源 commit 源 + 测试;没改源只 commit 测试)
+- [x] 新增 `testAppStoreIntentStatePreservation`(swap → ask → unsupported,assert 意图 id 不变)
+- [x] 跑测试
+- [x] 如有失败,审计 `dispatchStructuredIntent` 的 .unsupported / check_* 分支,确保不调 `resetFloatingWalletAction`
+- [x] 跑测试,PASS
+- [x] commit(改了源 commit 源 + 测试;没改源只 commit 测试)
 
 ## Task 15 — 全量验证
-- [ ] `./script/test.sh` 全 PASS
-- [ ] `./script/build_and_run.sh --verify`
-- [ ] 手测 LLM 路径(`CLIPMIND_INTENT_BACKEND=auto` + B.AI key):Aave + "可以质押吗" → unsupported 中文消息;地址 + "安全吗" → runResearch 触发
-- [ ] 手测 rule 路径(`CLIPMIND_INTENT_BACKEND=rule`):地址 + "转 5 USDC" → 确认单;地址 + "有什么风险" → 普通 Q&A
-- [ ] 更新 `IMPLEMENTATION_NOTES.md` 第 19 条
-- [ ] commit
+- [x] `./script/test.sh` 全 PASS
+- [x] `./script/build_and_run.sh --verify`
+- [x] 手测 LLM 路径(`CLIPMIND_INTENT_BACKEND=auto` + B.AI key):Aave + "可以质押吗" → unsupported 中文消息;地址 + "安全吗" → runResearch 触发
+- [x] 手测 rule 路径(`CLIPMIND_INTENT_BACKEND=rule`):地址 + "转 5 USDC" → 确认单;地址 + "有什么风险" → 普通 Q&A
+- [x] 更新 `IMPLEMENTATION_NOTES.md` 第 19 条
+- [x] commit
