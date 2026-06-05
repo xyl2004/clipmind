@@ -140,6 +140,24 @@ enum CoreSelfTests {
         let decodedCheckTx = try StructuredIntent.decode(raw: validCheckTxJSON)
         try suite.equal(decodedCheckTx.action, StructuredIntentAction.checkTx, "decode check_tx action")
         try suite.equal(decodedCheckTx.transactionHash.count, 66, "decode check_tx hash length")
+
+        let wrapped = """
+        Sure, here is the JSON:
+        ```json
+        {"action":"ask","chain":null,"target_address":"","target_query":"","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+        ```
+        Hope this helps.
+        """
+        let decodedWrapped = try StructuredIntent.decode(raw: wrapped)
+        try suite.equal(decodedWrapped.action, StructuredIntentAction.ask, "decode strips markdown wrapper")
+
+        let trailingText = """
+        {"action":"unsupported","chain":null,"target_address":"","target_query":"","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":"Bridge 暂未支持"}
+        用户希望跨链。
+        """
+        let decodedTrailing = try StructuredIntent.decode(raw: trailingText)
+        try suite.equal(decodedTrailing.action, StructuredIntentAction.unsupported, "decode strips trailing prose")
+        try suite.equal(decodedTrailing.unsupportedReason, "Bridge 暂未支持", "decode keeps unsupported_reason")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {

@@ -17,11 +17,11 @@
 - [x] commit
 
 ## Task 3 — JSON 容错(strip markdown / 末尾文字)
-- [ ] 加 2 条容错 fixture
-- [ ] 跑测试,失败
-- [ ] 加 `extractFirstJSONObject(from:)`,改 `decode` 先 strip
-- [ ] 跑测试,PASS
-- [ ] commit
+- [x] 加 2 条容错 fixture
+- [x] 跑测试,失败
+- [x] 加 `extractFirstJSONObject(from:)`,改 `decode` 先 strip
+- [x] 跑测试,PASS
+- [x] commit
 
 ## Task 4 — JSON 拒绝非法字段
 - [ ] 加 5 条 `expectThrows`(unknown action / 坏 address / 坏 hash / 越界 chain / 非 JSON)

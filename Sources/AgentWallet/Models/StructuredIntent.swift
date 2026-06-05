@@ -85,7 +85,8 @@ extension StructuredIntent {
     private static let allowedChainIDs = Set(ChainRegistry.supported.map(\.id))
 
     static func decode(raw: String) throws -> StructuredIntent {
-        let payload = raw.data(using: .utf8) ?? Data()
+        let cleaned = extractFirstJSONObject(from: raw)
+        let payload = cleaned.data(using: .utf8) ?? Data()
         let parsed: Any
         do {
             parsed = try JSONSerialization.jsonObject(with: payload, options: [])
@@ -130,6 +131,60 @@ extension StructuredIntent {
             slippagePercent: try optionalDouble(in: object, key: "slippage_percent"),
             unsupportedReason: try requiredString(in: object, key: "unsupported_reason")
         )
+    }
+
+    static func extractFirstJSONObject(from raw: String) -> String {
+        var working = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+
+        if let fenceStart = working.range(of: "```") {
+            let afterFence = working[fenceStart.upperBound...]
+            if let newline = afterFence.firstIndex(of: "\n") {
+                working = String(afterFence[afterFence.index(after: newline)...])
+            } else {
+                working = String(afterFence)
+            }
+
+            if let fenceEnd = working.range(of: "```") {
+                working = String(working[..<fenceEnd.lowerBound])
+            }
+            working = working.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+
+        guard let start = working.firstIndex(of: "{") else {
+            return working
+        }
+
+        var depth = 0
+        var isInsideString = false
+        var isEscaped = false
+        var index = start
+
+        while index < working.endIndex {
+            let character = working[index]
+
+            if isInsideString {
+                if isEscaped {
+                    isEscaped = false
+                } else if character == "\\" {
+                    isEscaped = true
+                } else if character == "\"" {
+                    isInsideString = false
+                }
+            } else if character == "\"" {
+                isInsideString = true
+            } else if character == "{" {
+                depth += 1
+            } else if character == "}" {
+                depth -= 1
+                if depth == 0 {
+                    return String(working[start...index])
+                }
+            }
+
+            index = working.index(after: index)
+        }
+
+        return String(working[start...])
     }
 
     private static func validateKeys(in object: [String: Any]) throws {
