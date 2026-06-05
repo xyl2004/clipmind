@@ -46,7 +46,7 @@ enum QueryClassifier {
             return preferredKind
         }
 
-        let value = input.trimmingCharacters(in: .whitespacesAndNewlines)
+        let value = normalizedLookupText(input)
 
         if isTransactionHash(value) {
             return .transaction
@@ -77,14 +77,26 @@ enum QueryClassifier {
     /// like "Uniswap", "Aerodrome", "base-eco". Anything longer or with prose
     /// punctuation is treated as free-form context instead.
     static func looksLikeProjectName(_ value: String) -> Bool {
-        guard !value.isEmpty, value.count <= 40 else {
+        let normalized = normalizedLookupText(value)
+        guard !normalized.isEmpty, normalized.count <= 40 else {
             return false
         }
-        let words = value.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
+        let words = normalized.split(whereSeparator: { $0.isWhitespace || $0.isNewline })
         guard words.count <= 4 else {
             return false
         }
-        return matches(value, pattern: "^[A-Za-z0-9 ._\\-]+$")
+        return matches(normalized, pattern: "^[A-Za-z0-9 ._\\-]+$")
+    }
+
+    static func normalizedLookupText(_ value: String) -> String {
+        var normalized = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        if let first = normalized.first,
+           (first == "$" || first == "#"),
+           normalized.count > 1 {
+            normalized.removeFirst()
+            normalized = normalized.trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        return normalized
     }
 
     private static func matches(_ value: String, pattern: String) -> Bool {

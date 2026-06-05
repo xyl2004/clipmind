@@ -12,7 +12,7 @@ enum SelectedTextReader {
         }
 
         if !AXIsProcessTrusted() {
-            return .failure("需要在系统设置里允许 AgentWallet 使用“辅助功能”，才能读取其他应用里的选中文字。")
+            return .failure("需要在系统设置里允许 ClipMind 使用“辅助功能”，才能读取其他应用里的选中文字。")
         }
 
         return .failure("没有读取到选中文字，已保留当前输入内容。")

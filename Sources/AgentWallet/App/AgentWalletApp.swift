@@ -12,7 +12,7 @@ struct AgentWalletApp: App {
     }
 
     var body: some Scene {
-        WindowGroup("AgentWallet", id: "main") {
+        WindowGroup("ClipMind", id: "main") {
             ContentView(store: appStore)
                 .frame(minWidth: 1080, minHeight: 720)
                 .onAppear {
@@ -23,8 +23,8 @@ struct AgentWalletApp: App {
             AgentWalletCommands(store: appStore)
         }
 
-        MenuBarExtra("AgentWallet", systemImage: "wallet.pass") {
-            Button("打开 AgentWallet") {
+        MenuBarExtra("ClipMind", systemImage: "wallet.pass") {
+            Button("打开 ClipMind") {
                 NSApp.activate(ignoringOtherApps: true)
                 appStore.showMainWindow()
             }
@@ -62,7 +62,7 @@ struct AgentWalletCommands: Commands {
     @ObservedObject var store: AppStore
 
     var body: some Commands {
-        CommandMenu("AgentWallet") {
+        CommandMenu("ClipMind") {
             Button("查询剪贴板") {
                 store.captureClipboard()
                 Task {

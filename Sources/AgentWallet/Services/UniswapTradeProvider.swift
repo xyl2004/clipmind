@@ -98,6 +98,9 @@ struct UniswapTokenCandidate: Identifiable, Hashable {
     let riskLevel: ContractRiskLevel
     let riskReasons: [String]
     let outputAmount: String?
+    let referencePriceUSD: Double?
+    let impliedPriceUSD: Double?
+    let priceDeviationPercent: Double?
     let gasFeeUSD: String?
     let priceImpact: Double?
     let routeSummary: String?
@@ -234,7 +237,7 @@ protocol TradeProvider {
 struct UniswapTradeProvider: TradeProvider {
     private static let defaultBaseURL = URL(string: "https://trade-api.gateway.uniswap.org/v1")!
     private static let tokenListURL = URL(string: "https://tokens.uniswap.org")!
-    private static let baseURLOverrideEnv = "AGENTWALLET_UNISWAP_BASE_URL"
+    private static let baseURLOverrideEnvKeys = ["CLIPMIND_UNISWAP_BASE_URL", "AGENTWALLET_UNISWAP_BASE_URL"]
     private static let candidateProbeLimit = 8
     private let session: URLSession
     private let apiKeyOverride: String?
@@ -245,7 +248,9 @@ struct UniswapTradeProvider: TradeProvider {
     }
 
     private var baseURL: URL {
-        ProcessInfo.processInfo.environment[Self.baseURLOverrideEnv]
+        let environment = ProcessInfo.processInfo.environment
+        return Self.baseURLOverrideEnvKeys.compactMap { environment[$0] }
+            .first(where: { !$0.isEmpty })
             .flatMap { URL(string: $0) }
             ?? Self.defaultBaseURL
     }
@@ -255,9 +260,10 @@ struct UniswapTradeProvider: TradeProvider {
         chain: ChainProfile,
         spendAsset: TokenProfile,
         spendAmount: String,
-        walletAddress: String
+        walletAddress: String,
+        referencePriceUSD: Double?
     ) async throws -> [UniswapTokenCandidate] {
-        let normalizedQuery = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalizedQuery = QueryClassifier.normalizedLookupText(query)
         guard !normalizedQuery.isEmpty else {
             return []
         }
@@ -274,8 +280,10 @@ struct UniswapTradeProvider: TradeProvider {
                 entry: entry,
                 chain: chain,
                 spendAsset: spendAsset,
+                spendAmount: spendAmount,
                 amountBaseUnits: amountBaseUnits,
-                walletAddress: walletAddress
+                walletAddress: walletAddress,
+                referencePriceUSD: referencePriceUSD
             )
             candidates.append(candidate)
         }
@@ -283,6 +291,18 @@ struct UniswapTradeProvider: TradeProvider {
         return candidates.sorted { lhs, rhs in
             if lhs.status != rhs.status {
                 return lhs.status == .quoted
+            }
+            if lhs.priceDeviationPercent != rhs.priceDeviationPercent {
+                switch (lhs.priceDeviationPercent, rhs.priceDeviationPercent) {
+                case let (left?, right?):
+                    return left < right
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    break
+                }
             }
             if lhs.riskLevel != rhs.riskLevel {
                 return lhs.riskLevel.rawValue < rhs.riskLevel.rawValue
@@ -379,8 +399,10 @@ struct UniswapTradeProvider: TradeProvider {
         entry: TokenListEntry,
         chain: ChainProfile,
         spendAsset: TokenProfile,
+        spendAmount: String,
         amountBaseUnits: String,
-        walletAddress: String
+        walletAddress: String,
+        referencePriceUSD: Double?
     ) async -> UniswapTokenCandidate {
         let id = "\(chain.chainID)-\(entry.address.lowercased())"
         if entry.address.lowercased() == spendAsset.address.lowercased() {
@@ -392,6 +414,7 @@ struct UniswapTradeProvider: TradeProvider {
                 routeSummary: nil,
                 liquiditySummary: nil,
                 rank: entry.rank,
+                priceDeviationPercent: nil,
                 quoteError: "候选代币和支付资产相同。",
                 txFailureReasons: []
             )
@@ -410,6 +433,9 @@ struct UniswapTradeProvider: TradeProvider {
                 riskLevel: risk.level,
                 riskReasons: risk.reasons,
                 outputAmount: nil,
+                referencePriceUSD: referencePriceUSD,
+                impliedPriceUSD: nil,
+                priceDeviationPercent: nil,
                 gasFeeUSD: nil,
                 priceImpact: nil,
                 routeSummary: nil,
@@ -431,6 +457,16 @@ struct UniswapTradeProvider: TradeProvider {
             )
             let quote = quoteObject["quote"] as? [String: Any] ?? [:]
             let outputBaseUnits = Self.extractOutputAmount(from: quoteObject)
+            let inputAmountUSD = Self.stableInputAmountUSD(spendAmount: spendAmount, spendAsset: spendAsset)
+            let impliedPriceUSD = Self.impliedPriceUSD(
+                inputAmountUSD: inputAmountUSD,
+                outputBaseUnits: outputBaseUnits,
+                outputDecimals: entry.decimals
+            )
+            let priceDeviationPercent = Self.priceDeviationPercent(
+                referencePriceUSD: referencePriceUSD,
+                impliedPriceUSD: impliedPriceUSD
+            )
             let priceImpact = Self.doubleValue(quote["priceImpact"])
             let routeSummary = quote["routeString"] as? String ?? Self.routeSummary(from: quote)
             let liquiditySummary = Self.liquiditySummary(from: quote)
@@ -443,6 +479,7 @@ struct UniswapTradeProvider: TradeProvider {
                 routeSummary: routeSummary,
                 liquiditySummary: liquiditySummary,
                 rank: entry.rank,
+                priceDeviationPercent: priceDeviationPercent,
                 quoteError: nil,
                 txFailureReasons: txFailureReasons
             )
@@ -465,6 +502,9 @@ struct UniswapTradeProvider: TradeProvider {
                     decimals: entry.decimals,
                     symbol: entry.symbol
                 ),
+                referencePriceUSD: referencePriceUSD,
+                impliedPriceUSD: impliedPriceUSD,
+                priceDeviationPercent: priceDeviationPercent,
                 gasFeeUSD: Self.stringValue(quote["gasFeeUSD"]),
                 priceImpact: priceImpact,
                 routeSummary: routeSummary,
@@ -481,6 +521,7 @@ struct UniswapTradeProvider: TradeProvider {
                 routeSummary: nil,
                 liquiditySummary: nil,
                 rank: entry.rank,
+                priceDeviationPercent: nil,
                 quoteError: error.localizedDescription,
                 txFailureReasons: []
             )
@@ -499,6 +540,9 @@ struct UniswapTradeProvider: TradeProvider {
                 riskLevel: risk.level,
                 riskReasons: risk.reasons,
                 outputAmount: nil,
+                referencePriceUSD: referencePriceUSD,
+                impliedPriceUSD: nil,
+                priceDeviationPercent: nil,
                 gasFeeUSD: nil,
                 priceImpact: nil,
                 routeSummary: nil,
@@ -767,6 +811,7 @@ struct UniswapTradeProvider: TradeProvider {
         routeSummary: String?,
         liquiditySummary: String?,
         rank: Int,
+        priceDeviationPercent: Double?,
         quoteError: String?,
         txFailureReasons: [String]
     ) -> (level: ContractRiskLevel, reasons: [String]) {
@@ -833,6 +878,18 @@ struct UniswapTradeProvider: TradeProvider {
             reasons.append("Quote 未返回 priceImpact。")
         }
 
+        if let priceDeviationPercent {
+            if priceDeviationPercent >= 30 {
+                escalate(to: .high)
+                reasons.append("Uniswap 隐含价格偏离 Surf 参考价 \(String(format: "%.2f", priceDeviationPercent))%。")
+            } else if priceDeviationPercent >= 10 {
+                escalate(to: .medium)
+                reasons.append("Uniswap 隐含价格偏离 Surf 参考价 \(String(format: "%.2f", priceDeviationPercent))%。")
+            } else {
+                reasons.append("Uniswap 隐含价格接近 Surf 参考价，偏离 \(String(format: "%.2f", priceDeviationPercent))%。")
+            }
+        }
+
         if status == .quoted {
             if routeSummary == nil {
                 escalate(to: .medium)
@@ -885,6 +942,63 @@ struct UniswapTradeProvider: TradeProvider {
         }
 
         return quote["outputAmount"].map { "\($0)" }
+    }
+
+    private static func stableInputAmountUSD(spendAmount: String, spendAsset: TokenProfile) -> Double? {
+        let stableSymbols = ["USDC", "USDT", "DAI"]
+        guard stableSymbols.contains(spendAsset.symbol.uppercased()) else {
+            return nil
+        }
+
+        return Double(
+            spendAmount
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+                .replacingOccurrences(of: ",", with: ".")
+        )
+    }
+
+    private static func impliedPriceUSD(
+        inputAmountUSD: Double?,
+        outputBaseUnits: String?,
+        outputDecimals: Int
+    ) -> Double? {
+        guard let inputAmountUSD,
+              inputAmountUSD > 0,
+              let outputAmount = decimalTokenAmount(baseUnits: outputBaseUnits, decimals: outputDecimals),
+              outputAmount > 0 else {
+            return nil
+        }
+
+        return inputAmountUSD / outputAmount
+    }
+
+    private static func priceDeviationPercent(
+        referencePriceUSD: Double?,
+        impliedPriceUSD: Double?
+    ) -> Double? {
+        guard let referencePriceUSD,
+              let impliedPriceUSD,
+              referencePriceUSD > 0,
+              impliedPriceUSD > 0 else {
+            return nil
+        }
+
+        return abs(impliedPriceUSD - referencePriceUSD) / referencePriceUSD * 100
+    }
+
+    private static func decimalTokenAmount(baseUnits: String?, decimals: Int) -> Double? {
+        guard let baseUnits,
+              let rawValue = Double(baseUnits),
+              rawValue > 0 else {
+            return nil
+        }
+
+        let divisor = pow(10, Double(max(0, decimals)))
+        guard divisor > 0 else {
+            return nil
+        }
+
+        return rawValue / divisor
     }
 
     private static func routeSummary(from quote: [String: Any]) -> String? {
@@ -1042,7 +1156,7 @@ enum UniswapTradeError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            "未设置 Uniswap API Key。请保存到 Keychain，或设置 AGENTWALLET_UNISWAP_API_KEY / UNISWAP_API_KEY。"
+            "未设置 Uniswap API Key。请保存到 Keychain，或设置 CLIPMIND_UNISWAP_API_KEY / AGENTWALLET_UNISWAP_API_KEY / UNISWAP_API_KEY。"
         case .invalidWallet:
             "请先创建或导入一个有效的本地 EVM 钱包。"
         case .invalidToken:

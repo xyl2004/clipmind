@@ -2,7 +2,7 @@ import Foundation
 
 struct LLMClient {
     private static let defaultBaseURL = URL(string: "https://api.b.ai")!
-    private static let baseURLOverrideEnv = "AGENTWALLET_BAI_BASE_URL"
+    private static let baseURLOverrideEnvKeys = ["CLIPMIND_BAI_BASE_URL", "AGENTWALLET_BAI_BASE_URL"]
     private let model = "deepseek-v4-flash"
     private let session: URLSession
 
@@ -11,7 +11,9 @@ struct LLMClient {
     }
 
     private var endpoint: URL {
-        let base = ProcessInfo.processInfo.environment[Self.baseURLOverrideEnv]
+        let environment = ProcessInfo.processInfo.environment
+        let base = Self.baseURLOverrideEnvKeys.compactMap { environment[$0] }
+            .first(where: { !$0.isEmpty })
             .flatMap { URL(string: $0) }
             ?? Self.defaultBaseURL
         return base.appendingPathComponent("v1/chat/completions")
@@ -97,7 +99,7 @@ struct LLMClient {
 
     private var systemPrompt: String {
         """
-        你是 AgentWallet 的链上研究助手。你只根据用户提供的 Surf 数据做中文解释，不要编造未出现的数据。
+        你是 ClipMind 的链上研究助手。你只根据用户提供的 Surf 数据做中文解释，不要编造未出现的数据。
         输出面向普通 Web3 用户，简洁、直接、可执行。
         必须使用纯文本中文，不要使用 Markdown 标记，不要输出星号、井号、反引号或表格。
         结构固定为：
@@ -111,7 +113,7 @@ struct LLMClient {
 
     private var contextSystemPrompt: String {
         """
-        你是 AgentWallet 的上下文 AI 助手。用户会选中一段文字、地址、合约、交易哈希或网页内容，然后向你提问。
+        你是 ClipMind 的上下文 AI 助手。用户会选中一段文字、地址、合约、交易哈希或网页内容，然后向你提问。
         请优先解释“被选中的内容是什么、可能代表什么、用户下一步可以怎么理解它”。
         如果提供了 Surf 链上数据，只能基于这些数据补充说明，不要编造没有出现的数据。
         回答用中文，简洁直接。必须使用纯文本，不要使用 Markdown，不要输出星号、井号、反引号或表格。
@@ -264,7 +266,7 @@ enum LLMClientError: LocalizedError {
     var errorDescription: String? {
         switch self {
         case .missingAPIKey:
-            "未设置 B.AI API Key。请在页面顶部保存到 Keychain，或设置 AGENTWALLET_BAI_API_KEY / B_AI_API_KEY 环境变量。"
+            "未设置 B.AI API Key。请在页面顶部保存到 Keychain，或设置 CLIPMIND_BAI_API_KEY / AGENTWALLET_BAI_API_KEY / B_AI_API_KEY 环境变量。"
         case .invalidResponse:
             "LLM 服务返回了无效响应。"
         case .apiError(let message):

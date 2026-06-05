@@ -18,13 +18,25 @@ struct ChainProfile: Identifiable, Hashable, Sendable {
     }
 
     var rpcURL: URL? {
-        if let override = ProcessInfo.processInfo.environment[rpcEnvironmentKey],
-           let url = URL(string: override),
-           !override.isEmpty {
-            return url
+        let environment = ProcessInfo.processInfo.environment
+        for key in rpcEnvironmentKeys {
+            if let override = environment[key],
+               let url = URL(string: override),
+               !override.isEmpty {
+                return url
+            }
         }
 
         return defaultRPCURL
+    }
+
+    private var rpcEnvironmentKeys: [String] {
+        let legacyKey = rpcEnvironmentKey.replacingOccurrences(of: "CLIPMIND_", with: "AGENTWALLET_")
+        if legacyKey == rpcEnvironmentKey {
+            return [rpcEnvironmentKey]
+        }
+
+        return [rpcEnvironmentKey, legacyKey]
     }
 }
 
@@ -49,7 +61,7 @@ enum ChainRegistry {
         surfSlug: "ethereum",
         explorerBaseURL: URL(string: "https://etherscan.io")!,
         defaultRPCURL: URL(string: "https://ethereum-rpc.publicnode.com")!,
-        rpcEnvironmentKey: "AGENTWALLET_RPC_ETHEREUM",
+        rpcEnvironmentKey: "CLIPMIND_RPC_ETHEREUM",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -67,7 +79,7 @@ enum ChainRegistry {
         surfSlug: "sepolia",
         explorerBaseURL: URL(string: "https://sepolia.etherscan.io")!,
         defaultRPCURL: URL(string: "https://ethereum-sepolia-rpc.publicnode.com")!,
-        rpcEnvironmentKey: "AGENTWALLET_RPC_ETHEREUM_SEPOLIA",
+        rpcEnvironmentKey: "CLIPMIND_RPC_ETHEREUM_SEPOLIA",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: .nativeETH
@@ -81,7 +93,7 @@ enum ChainRegistry {
         surfSlug: "base",
         explorerBaseURL: URL(string: "https://basescan.org")!,
         defaultRPCURL: URL(string: "https://mainnet.base.org")!,
-        rpcEnvironmentKey: "AGENTWALLET_RPC_BASE",
+        rpcEnvironmentKey: "CLIPMIND_RPC_BASE",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -99,7 +111,7 @@ enum ChainRegistry {
         surfSlug: "arbitrum",
         explorerBaseURL: URL(string: "https://arbiscan.io")!,
         defaultRPCURL: URL(string: "https://arb1.arbitrum.io/rpc")!,
-        rpcEnvironmentKey: "AGENTWALLET_RPC_ARBITRUM",
+        rpcEnvironmentKey: "CLIPMIND_RPC_ARBITRUM",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -117,7 +129,7 @@ enum ChainRegistry {
         surfSlug: "optimism",
         explorerBaseURL: URL(string: "https://optimistic.etherscan.io")!,
         defaultRPCURL: URL(string: "https://mainnet.optimism.io")!,
-        rpcEnvironmentKey: "AGENTWALLET_RPC_OPTIMISM",
+        rpcEnvironmentKey: "CLIPMIND_RPC_OPTIMISM",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -135,7 +147,7 @@ enum ChainRegistry {
         surfSlug: "polygon",
         explorerBaseURL: URL(string: "https://polygonscan.com")!,
         defaultRPCURL: URL(string: "https://polygon-bor-rpc.publicnode.com")!,
-        rpcEnvironmentKey: "AGENTWALLET_RPC_POLYGON",
+        rpcEnvironmentKey: "CLIPMIND_RPC_POLYGON",
         nativeTokenSymbol: "POL",
         supportsSwap: true,
         defaultSpendToken: TokenProfile(
@@ -153,10 +165,14 @@ enum ChainRegistry {
         surfSlug: "unichain",
         explorerBaseURL: URL(string: "https://uniscan.xyz")!,
         defaultRPCURL: URL(string: "https://mainnet.unichain.org")!,
-        rpcEnvironmentKey: "AGENTWALLET_RPC_UNICHAIN",
+        rpcEnvironmentKey: "CLIPMIND_RPC_UNICHAIN",
         nativeTokenSymbol: "ETH",
         supportsSwap: true,
-        defaultSpendToken: .nativeETH
+        defaultSpendToken: TokenProfile(
+            symbol: "USDC",
+            address: "0x078D782b760474a361dDA0AF3839290b0EF57AD6",
+            decimals: 6
+        )
     )
 
     static let supported: [ChainProfile] = [

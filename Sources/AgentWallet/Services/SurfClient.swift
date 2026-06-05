@@ -43,6 +43,87 @@ actor SurfClient {
         )
     }
 
+    func walletTokenAssets(
+        address: String,
+        chains: [ChainProfile]
+    ) async throws -> [WalletChainTokenAssets] {
+        let surfChains = chains.filter(Self.supportsOnchainQuery)
+        guard QueryClassifier.isAddress(address), !surfChains.isEmpty else {
+            throw SurfClientError.unsupportedInput
+        }
+
+        let executable = try resolveExecutable()
+        let timeout = commandTimeout
+        let operations = surfChains.map { chain in
+            SurfOperation(
+                command: "wallet-detail",
+                arguments: [
+                    "--address", address,
+                    "--chain", chain.surfSlug,
+                    "--fields", "balance,tokens"
+                ],
+                title: "\(chain.shortName) 钱包资产",
+                chain: chain
+            )
+        }
+
+        let results = await withTaskGroup(
+            of: (Int, SurfCommandResult).self,
+            returning: [SurfCommandResult].self
+        ) { group in
+            for (index, operation) in operations.enumerated() {
+                group.addTask {
+                    let result = await Self.runDetached(
+                        operation: operation,
+                        executable: executable,
+                        timeout: timeout
+                    )
+                    return (index, result)
+                }
+            }
+
+            var buffer: [(Int, SurfCommandResult)] = []
+            for await pair in group {
+                buffer.append(pair)
+            }
+            return buffer.sorted { $0.0 < $1.0 }.map { $0.1 }
+        }
+
+        return results.map(Self.walletChainTokenAssets)
+    }
+
+    func tokenPriceAnchor(symbol rawSymbol: String) async throws -> TokenPriceAnchor {
+        let symbol = QueryClassifier.normalizedLookupText(rawSymbol).uppercased()
+        guard !symbol.isEmpty else {
+            throw SurfClientError.unsupportedInput
+        }
+
+        let executable = try resolveExecutable()
+        let operation = SurfOperation(
+            command: "market-price",
+            arguments: [
+                "--symbol", symbol,
+                "--time-range", "1d",
+                "--currency", "usd"
+            ],
+            title: "\(symbol) Surf 价格",
+            chain: nil
+        )
+        let result = await Self.runDetached(
+            operation: operation,
+            executable: executable,
+            timeout: commandTimeout
+        )
+
+        guard result.succeeded else {
+            throw SurfClientError.commandFailed(result.errorMessage ?? "Surf 价格查询失败。")
+        }
+        guard let anchor = TokenPriceAnchor(result: result, fallbackSymbol: symbol) else {
+            throw SurfClientError.invalidResponse("Surf 没有返回可用的最新价格。")
+        }
+        return anchor
+    }
+
     private func operations(for query: String, kind: QueryKind, chainFilter: ChainFilter) -> [SurfOperation] {
         switch kind {
         case .auto:
@@ -127,11 +208,12 @@ actor SurfClient {
                 )
             }
         case .project:
+            let lookupQuery = QueryClassifier.normalizedLookupText(query)
             return [
                 SurfOperation(
                     command: "project-detail",
                     arguments: [
-                        "--q", query,
+                        "--q", lookupQuery,
                         "--fields", "overview,token_info,contracts,social"
                     ],
                     title: "项目详情",
@@ -140,7 +222,7 @@ actor SurfClient {
                 SurfOperation(
                     command: "search-news",
                     arguments: [
-                        "--q", query,
+                        "--q", lookupQuery,
                         "--limit", "5"
                     ],
                     title: "近期加密新闻",
@@ -150,16 +232,106 @@ actor SurfClient {
         }
     }
 
+    static func walletChainTokenAssets(from result: SurfCommandResult) -> WalletChainTokenAssets {
+        let chain = result.operation.chain ?? ChainRegistry.base
+        guard result.succeeded else {
+            return WalletChainTokenAssets(
+                chain: chain,
+                tokens: [],
+                totalUSD: nil,
+                errorMessage: result.errorMessage,
+                updatedAt: Date()
+            )
+        }
+
+        guard let data = JSONPrettyPrinter.dictionary(result.jsonObject, path: ["data"]) else {
+            return WalletChainTokenAssets(
+                chain: chain,
+                tokens: [],
+                totalUSD: nil,
+                errorMessage: "Surf 没有返回钱包资产数据。",
+                updatedAt: Date()
+            )
+        }
+
+        let balance = data["evm_balance"] as? [String: Any]
+        let totalUSD = optionalCurrency(balance?["total_usd"])
+        let tokens = JSONPrettyPrinter.array(data["evm_tokens"]).compactMap(walletTokenBalance)
+
+        return WalletChainTokenAssets(
+            chain: chain,
+            tokens: tokens,
+            totalUSD: totalUSD,
+            errorMessage: nil,
+            updatedAt: Date()
+        )
+    }
+
+    private static func walletTokenBalance(_ item: Any) -> WalletTokenBalance? {
+        guard let dict = item as? [String: Any] else {
+            return nil
+        }
+
+        let symbol = string(dict["symbol"])
+            ?? string(dict["token_symbol"])
+            ?? string(dict["ticker"])
+            ?? "TOKEN"
+        let balance = string(dict["balance"])
+            ?? string(dict["amount"])
+            ?? string(dict["token_balance"])
+            ?? "-"
+        let address = string(dict["address"])
+            ?? string(dict["token_address"])
+            ?? string(dict["contract_address"])
+        let name = string(dict["name"]) ?? string(dict["token_name"])
+        let usdValue = optionalCurrency(dict["usd_value"] ?? dict["value_usd"])
+
+        return WalletTokenBalance(
+            symbol: symbol,
+            name: name,
+            balance: balance,
+            usdValue: usdValue,
+            address: address
+        )
+    }
+
+    private static func optionalCurrency(_ value: Any?) -> String? {
+        guard value != nil else {
+            return nil
+        }
+
+        return JSONPrettyPrinter.formatCurrency(value)
+    }
+
+    private static func string(_ value: Any?) -> String? {
+        switch value {
+        case let string as String:
+            return string
+        case let number as NSNumber:
+            return "\(number)"
+        case let int as Int:
+            return "\(int)"
+        case let double as Double:
+            return "\(double)"
+        default:
+            return nil
+        }
+    }
+
     private func targetChains(for query: String, kind: QueryKind, chainFilter: ChainFilter) -> [ChainProfile] {
         if let profile = chainFilter.profile {
-            return [profile]
+            return Self.supportsOnchainQuery(profile) ? [profile] : []
         }
 
         if kind == .wallet || kind == .token || kind == .transaction {
-            return ChainRegistry.supported
+            return ChainRegistry.supported.filter(Self.supportsOnchainQuery)
         }
 
         return [ChainRegistry.base]
+    }
+
+    private static func supportsOnchainQuery(_ chain: ChainProfile) -> Bool {
+        chain.surfSlug != ChainRegistry.unichain.surfSlug
     }
 
     private func resolveExecutable() throws -> String {
@@ -230,6 +402,11 @@ actor SurfClient {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: executable)
         process.arguments = arguments
+        if let apiKey = CredentialStore.readSurfAPIKey(), !apiKey.isEmpty {
+            var environment = ProcessInfo.processInfo.environment
+            environment["SURF_API_KEY"] = apiKey
+            process.environment = environment
+        }
 
         let stdoutPipe = Pipe()
         let stderrPipe = Pipe()
@@ -343,9 +520,79 @@ struct SurfCommandResult: @unchecked Sendable {
     }
 }
 
+struct TokenPriceAnchor: Equatable, Sendable {
+    let symbol: String
+    let priceUSD: Double
+    let latestTimestamp: Int?
+    let changePercent24h: Double?
+    let high24h: Double?
+    let low24h: Double?
+    let rawJSON: String?
+
+    var formattedPrice: String {
+        JSONPrettyPrinter.formatCurrency(priceUSD)
+    }
+
+    var formattedChange: String? {
+        guard let changePercent24h else {
+            return nil
+        }
+        return JSONPrettyPrinter.formatPercent(changePercent24h)
+    }
+
+    init?(
+        result: SurfCommandResult,
+        fallbackSymbol: String
+    ) {
+        guard let object = result.jsonObject as? [String: Any],
+              let summary = object["summary"] as? [String: Any],
+              let price = Self.doubleValue(summary["last"]) else {
+            return nil
+        }
+
+        self.symbol = (object["symbol"] as? String ?? fallbackSymbol).uppercased()
+        self.priceUSD = price
+        self.latestTimestamp = Self.intValue(summary["latest_dt"])
+        self.changePercent24h = Self.doubleValue(summary["change_pct"])
+        self.high24h = Self.doubleValue(summary["high"])
+        self.low24h = Self.doubleValue(summary["low"])
+        self.rawJSON = JSONPrettyPrinter.prettyString(object)
+    }
+
+    private static func doubleValue(_ value: Any?) -> Double? {
+        switch value {
+        case let double as Double:
+            return double
+        case let int as Int:
+            return Double(int)
+        case let number as NSNumber:
+            return number.doubleValue
+        case let string as String:
+            return Double(string)
+        default:
+            return nil
+        }
+    }
+
+    private static func intValue(_ value: Any?) -> Int? {
+        switch value {
+        case let int as Int:
+            return int
+        case let number as NSNumber:
+            return number.intValue
+        case let string as String:
+            return Int(string)
+        default:
+            return nil
+        }
+    }
+}
+
 enum SurfClientError: LocalizedError {
     case missingSurfCLI
     case unsupportedInput
+    case commandFailed(String)
+    case invalidResponse(String)
 
     var errorDescription: String? {
         switch self {
@@ -353,6 +600,10 @@ enum SurfClientError: LocalizedError {
             "没有找到 Surf CLI。请先安装 Surf，然后运行 surf sync。"
         case .unsupportedInput:
             "暂不支持这种输入。"
+        case .commandFailed(let message):
+            "Surf 查询失败：\(message)"
+        case .invalidResponse(let message):
+            message
         }
     }
 }

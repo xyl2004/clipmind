@@ -3,10 +3,12 @@ import Security
 
 enum CredentialStore {
     private static let baiService = "AgentWallet.BAIAPIKey"
+    private static let surfService = "AgentWallet.SurfAPIKey"
     private static let uniswapService = "AgentWallet.UniswapAPIKey"
     private static let account = "default"
     private static let cacheLock = NSLock()
     private static var cachedBAIAPIKey: String?
+    private static var cachedSurfAPIKey: String?
     private static var cachedUniswapAPIKey: String?
 
     static func readBAIAPIKey() -> String? {
@@ -14,7 +16,7 @@ enum CredentialStore {
             service: baiService,
             cachedValue: { cachedBAIAPIKey },
             cacheStore: { cachedBAIAPIKey = $0 },
-            environmentKeys: ["AGENTWALLET_BAI_API_KEY", "B_AI_API_KEY"]
+            environmentKeys: ["CLIPMIND_BAI_API_KEY", "AGENTWALLET_BAI_API_KEY", "B_AI_API_KEY"]
         )
     }
 
@@ -22,7 +24,7 @@ enum CredentialStore {
         hasAPIKey(
             service: baiService,
             cachedValue: { cachedBAIAPIKey },
-            environmentKeys: ["AGENTWALLET_BAI_API_KEY", "B_AI_API_KEY"]
+            environmentKeys: ["CLIPMIND_BAI_API_KEY", "AGENTWALLET_BAI_API_KEY", "B_AI_API_KEY"]
         )
     }
 
@@ -30,12 +32,33 @@ enum CredentialStore {
         try saveAPIKey(key, service: baiService) { cachedBAIAPIKey = $0 }
     }
 
+    static func readSurfAPIKey() -> String? {
+        readAPIKey(
+            service: surfService,
+            cachedValue: { cachedSurfAPIKey },
+            cacheStore: { cachedSurfAPIKey = $0 },
+            environmentKeys: ["CLIPMIND_SURF_API_KEY", "SURF_API_KEY"]
+        )
+    }
+
+    static func hasSurfAPIKey() -> Bool {
+        hasAPIKey(
+            service: surfService,
+            cachedValue: { cachedSurfAPIKey },
+            environmentKeys: ["CLIPMIND_SURF_API_KEY", "SURF_API_KEY"]
+        )
+    }
+
+    static func saveSurfAPIKey(_ key: String) throws {
+        try saveAPIKey(key, service: surfService) { cachedSurfAPIKey = $0 }
+    }
+
     static func readUniswapAPIKey() -> String? {
         readAPIKey(
             service: uniswapService,
             cachedValue: { cachedUniswapAPIKey },
             cacheStore: { cachedUniswapAPIKey = $0 },
-            environmentKeys: ["AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
+            environmentKeys: ["CLIPMIND_UNISWAP_API_KEY", "AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
         )
     }
 
@@ -43,7 +66,7 @@ enum CredentialStore {
         readCachedOrEnvironmentAPIKey(
             cachedValue: { cachedUniswapAPIKey },
             cacheStore: { cachedUniswapAPIKey = $0 },
-            environmentKeys: ["AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
+            environmentKeys: ["CLIPMIND_UNISWAP_API_KEY", "AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
         )
     }
 
@@ -51,7 +74,7 @@ enum CredentialStore {
         hasAPIKey(
             service: uniswapService,
             cachedValue: { cachedUniswapAPIKey },
-            environmentKeys: ["AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
+            environmentKeys: ["CLIPMIND_UNISWAP_API_KEY", "AGENTWALLET_UNISWAP_API_KEY", "UNISWAP_API_KEY"]
         )
     }
 
@@ -73,6 +96,14 @@ enum CredentialStore {
     static func clearBAIAPIKey() -> Bool {
         invalidateCache()
         return clearAPIKey(service: baiService)
+    }
+
+    @discardableResult
+    static func clearSurfAPIKey() -> Bool {
+        cacheLock.lock()
+        cachedSurfAPIKey = nil
+        cacheLock.unlock()
+        return clearAPIKey(service: surfService)
     }
 
     @discardableResult

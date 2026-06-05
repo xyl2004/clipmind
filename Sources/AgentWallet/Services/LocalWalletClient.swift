@@ -42,9 +42,19 @@ struct LocalWalletBalance: Equatable {
 }
 
 struct LocalWalletClient {
-    private static let service = "AgentWallet.LocalPrivateKey"
-    private static let addressService = "AgentWallet.LocalWalletAddress"
-    private static let account = "default"
+    private let service: String
+    private let addressService: String
+    private let account: String
+
+    init(
+        service: String = "AgentWallet.LocalPrivateKey",
+        addressService: String = "AgentWallet.LocalWalletAddress",
+        account: String = "default"
+    ) {
+        self.service = service
+        self.addressService = addressService
+        self.account = account
+    }
 
     func loadAccount() throws -> LocalWalletAccount? {
         if let address = try readAccountAddress() {
@@ -105,8 +115,16 @@ struct LocalWalletClient {
     }
 
     func deleteWallet() throws {
-        try deleteItem(query: Self.privateKeyQuery())
-        try deleteItem(query: Self.addressQuery())
+        try deleteItem(query: privateKeyQuery())
+        try deleteItem(query: addressQuery())
+    }
+
+    func exportPrivateKeyHex() throws -> String {
+        guard let privateKey = try readPrivateKey() else {
+            throw LocalWalletError.walletNotFound
+        }
+
+        return Self.privateKeyHex(from: privateKey)
     }
 
     func fetchNativeBalance(
@@ -209,7 +227,7 @@ struct LocalWalletClient {
 
     private func readPrivateKey() throws -> Data? {
         var item: CFTypeRef?
-        var query = Self.privateKeyQuery()
+        var query = privateKeyQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -239,7 +257,7 @@ struct LocalWalletClient {
             kSecAttrAccessible as String: kSecAttrAccessibleWhenUnlockedThisDeviceOnly
         ]
 
-        let updateStatus = SecItemUpdate(Self.privateKeyQuery() as CFDictionary, updateAttributes as CFDictionary)
+        let updateStatus = SecItemUpdate(privateKeyQuery() as CFDictionary, updateAttributes as CFDictionary)
         if updateStatus == errSecSuccess {
             return
         }
@@ -248,7 +266,7 @@ struct LocalWalletClient {
             throw LocalWalletError.keychainStatus(updateStatus)
         }
 
-        var addQuery = Self.privateKeyQuery()
+        var addQuery = privateKeyQuery()
         addQuery[kSecValueData as String] = privateKey
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleWhenUnlockedThisDeviceOnly
 
@@ -260,7 +278,7 @@ struct LocalWalletClient {
 
     private func readAccountAddress() throws -> String? {
         var item: CFTypeRef?
-        var query = Self.addressQuery()
+        var query = addressQuery()
         query[kSecReturnData as String] = true
         query[kSecMatchLimit as String] = kSecMatchLimitOne
 
@@ -293,7 +311,7 @@ struct LocalWalletClient {
             kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
         ]
 
-        let updateStatus = SecItemUpdate(Self.addressQuery() as CFDictionary, updateAttributes as CFDictionary)
+        let updateStatus = SecItemUpdate(addressQuery() as CFDictionary, updateAttributes as CFDictionary)
         if updateStatus == errSecSuccess {
             return
         }
@@ -302,7 +320,7 @@ struct LocalWalletClient {
             throw LocalWalletError.keychainStatus(updateStatus)
         }
 
-        var addQuery = Self.addressQuery()
+        var addQuery = addressQuery()
         addQuery[kSecValueData as String] = data
         addQuery[kSecAttrAccessible as String] = kSecAttrAccessibleAfterFirstUnlock
 
@@ -313,7 +331,7 @@ struct LocalWalletClient {
     }
 
     private func privateKeyItemExists() -> Bool {
-        var query = Self.privateKeyQuery()
+        var query = privateKeyQuery()
         query[kSecReturnData as String] = false
         query[kSecMatchLimit as String] = kSecMatchLimitOne
         return SecItemCopyMatching(query as CFDictionary, nil) == errSecSuccess
@@ -326,7 +344,7 @@ struct LocalWalletClient {
         }
     }
 
-    private static func privateKeyQuery() -> [String: Any] {
+    private func privateKeyQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: service,
@@ -334,7 +352,7 @@ struct LocalWalletClient {
         ]
     }
 
-    private static func addressQuery() -> [String: Any] {
+    private func addressQuery() -> [String: Any] {
         [
             kSecClass as String: kSecClassGenericPassword,
             kSecAttrService as String: addressService,
@@ -353,6 +371,10 @@ struct LocalWalletClient {
         }
 
         return data
+    }
+
+    private static func privateKeyHex(from privateKey: Data) -> String {
+        "0x" + privateKey.map { String(format: "%02x", $0) }.joined()
     }
 
     private static func address(from privateKey: Data) throws -> String {
@@ -451,7 +473,7 @@ enum LocalWalletError: LocalizedError {
         case .invalidTransaction:
             "交易请求无效，无法在本机签名。"
         case .missingRPCURL(let chain):
-            "\(chain) 没有可用 RPC。可以设置对应的 AGENTWALLET_RPC_* 环境变量。"
+            "\(chain) 没有可用 RPC。可以设置对应的 CLIPMIND_RPC_* 环境变量；旧的 AGENTWALLET_RPC_* 仍兼容。"
         case .fromAddressMismatch(let expected, let actual):
             "交易发起地址不匹配。本地钱包是 \(JSONPrettyPrinter.shortAddress(expected))，交易要求 \(JSONPrettyPrinter.shortAddress(actual))。"
         case .chainMismatch(let expected, let actual):

@@ -3,12 +3,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "AgentWallet",
+    name: "ClipMind",
     platforms: [
         .macOS(.v14)
     ],
     products: [
-        .executable(name: "AgentWallet", targets: ["AgentWallet"])
+        .executable(name: "ClipMind", targets: ["AgentWallet"])
     ],
     dependencies: [
         .package(url: "https://github.com/web3swift-team/web3swift.git", from: "3.3.2")

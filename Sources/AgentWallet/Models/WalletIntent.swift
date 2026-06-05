@@ -90,7 +90,8 @@ enum WalletIntentParser {
     static func parse(
         selectedText: String,
         question: String,
-        chain: ChainProfile
+        chain: ChainProfile,
+        continuing previousIntent: WalletIntentDraft? = nil
     ) -> WalletIntentDraft {
         let selectedContext = selectedText.trimmingCharacters(in: .whitespacesAndNewlines)
         let normalizedQuestion = question.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -99,6 +100,17 @@ enum WalletIntentParser {
         let selectedAddress = QueryClassifier.isAddress(selectedContext) ? selectedContext : ""
         let inlineAddress = firstAddress(in: normalizedQuestion)
         let amountMatch = extractAmount(from: normalizedQuestion)
+
+        if !isSwapIntent(lowercasedQuestion),
+           !isTransferIntent(lowercasedQuestion),
+           let continuation = continuationSwapIntent(
+            previousIntent: previousIntent,
+            selectedContext: selectedContext,
+            amountMatch: amountMatch,
+            chain: chain
+           ) {
+            return continuation
+        }
 
         if isSwapIntent(lowercasedQuestion) {
             let targetAddress = selectedAddress.isEmpty ? inlineAddress : selectedAddress
@@ -222,8 +234,8 @@ enum WalletIntentParser {
         }
 
         let selected = selectedContext.trimmingCharacters(in: .whitespacesAndNewlines)
-        if looksLikeTokenName(selected) {
-            return selected
+        if let normalizedSelected = normalizedTokenName(selected) {
+            return normalizedSelected
         }
 
         let markers = ["买", "购买", "兑换", "换成", "swap", "buy"]
@@ -239,27 +251,32 @@ enum WalletIntentParser {
             let words = suffix.split { character in
                 character.isWhitespace || character == "," || character == "，" || character == "." || character == "。"
             }
-            if let word = words.first.map(String.init), looksLikeTokenName(word) {
-                return word
+            if let word = words.first.map(String.init),
+               let normalizedWord = normalizedTokenName(word) {
+                return normalizedWord
             }
         }
 
         return ""
     }
 
-    private static func looksLikeTokenName(_ value: String) -> Bool {
-        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+    private static func normalizedTokenName(_ value: String) -> String? {
+        let trimmed = QueryClassifier.normalizedLookupText(value)
         guard !trimmed.isEmpty, trimmed.count <= 32 else {
-            return false
+            return nil
         }
 
         if QueryClassifier.isAddress(trimmed) || QueryClassifier.isTransactionHash(trimmed) {
-            return false
+            return nil
         }
 
-        return trimmed.allSatisfy { character in
+        guard trimmed.allSatisfy({ character in
             character.isLetter || character.isNumber || character == "-" || character == "_" || character == "."
+        }) else {
+            return nil
         }
+
+        return trimmed
     }
 
     private static func swapTargetSummary(address: String, query: String) -> String {
@@ -332,6 +349,48 @@ enum WalletIntentParser {
         }
 
         return ("", "")
+    }
+
+    private static func continuationSwapIntent(
+        previousIntent: WalletIntentDraft?,
+        selectedContext: String,
+        amountMatch: (amount: String, symbol: String),
+        chain: ChainProfile
+    ) -> WalletIntentDraft? {
+        guard let previousIntent,
+              previousIntent.action == .swap,
+              previousIntent.missingFields.contains("支付金额"),
+              !amountMatch.amount.isEmpty,
+              !previousIntent.targetAddress.isEmpty || !previousIntent.targetQuery.isEmpty else {
+            return nil
+        }
+
+        let spendAsset = tokenProfile(
+            symbolHint: amountMatch.symbol,
+            chain: chain,
+            defaultForSwap: true
+        )
+        var missingFields: [String] = []
+        if spendAsset == nil {
+            missingFields.append("支付资产")
+        }
+
+        let asset = spendAsset ?? chain.defaultSpendToken
+        let context = previousIntent.selectedContext.isEmpty ? selectedContext : previousIntent.selectedContext
+        return WalletIntentDraft(
+            action: .swap,
+            selectedContext: context,
+            targetAddress: previousIntent.targetAddress,
+            targetQuery: previousIntent.targetQuery,
+            chain: chain,
+            spendAsset: asset,
+            spendAmount: amountMatch.amount,
+            recipientAddress: "",
+            slippage: previousIntent.slippage,
+            missingFields: missingFields,
+            riskNotes: previousIntent.riskNotes,
+            confirmationSummary: "准备在 \(chain.displayName) 用 \(amountMatch.amount) \(asset.symbol) 购买 \(swapTargetSummary(address: previousIntent.targetAddress, query: previousIntent.targetQuery))。"
+        )
     }
 
     private static func tokenProfile(

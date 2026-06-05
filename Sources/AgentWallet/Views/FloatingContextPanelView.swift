@@ -113,7 +113,7 @@ struct FloatingContextPanelView: View {
 
     private var header: some View {
         HStack(spacing: 10) {
-            Label("AgentWallet", systemImage: "wallet.pass")
+            Label("ClipMind", systemImage: "wallet.pass")
                 .font(.headline)
                 .foregroundStyle(AppTheme.primaryText)
 
@@ -465,6 +465,10 @@ private struct FloatingWalletActionSection: View {
                 FloatingIntentOverview(intent: intent)
             }
 
+            if let priceAnchor = store.swapPriceAnchor {
+                FloatingPriceAnchorView(priceAnchor: priceAnchor)
+            }
+
             if store.isBuildingFloatingWalletAction {
                 HStack(spacing: 10) {
                     ProgressView()
@@ -536,6 +540,21 @@ private struct FloatingWalletActionSection: View {
     }
 }
 
+private struct FloatingPriceAnchorView: View {
+    let priceAnchor: TokenPriceAnchor
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            FloatingIntentRow(label: "Surf 参考价", value: "\(priceAnchor.symbol) \(priceAnchor.formattedPrice)")
+            if let change = priceAnchor.formattedChange {
+                FloatingIntentRow(label: "24h", value: change)
+            }
+        }
+        .padding(10)
+        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+    }
+}
+
 private struct FloatingIntentOverview: View {
     let intent: WalletIntentDraft
 
@@ -598,7 +617,7 @@ private struct FloatingTokenCandidateRow: View {
                         .foregroundStyle(AppTheme.primaryText)
                         .lineLimit(1)
 
-                    Text("\(candidate.shortAddress) · \(candidate.matchReason)")
+                    Text("\(candidate.chain.shortName) · \(candidate.shortAddress) · \(candidate.matchReason)")
                         .font(.system(.caption2, design: .monospaced))
                         .foregroundStyle(AppTheme.mutedText)
                         .textSelection(.enabled)
@@ -618,6 +637,7 @@ private struct FloatingTokenCandidateRow: View {
             }
 
             VStack(alignment: .leading, spacing: 5) {
+                FloatingIntentRow(label: "链", value: candidate.chain.displayName)
                 FloatingIntentRow(label: "状态", value: candidate.status.title)
                 FloatingIntentRow(label: "合约风险", value: candidate.riskLevel.title)
 
@@ -635,6 +655,18 @@ private struct FloatingTokenCandidateRow: View {
 
                 if let outputAmount = candidate.outputAmount {
                     FloatingIntentRow(label: "预计收到", value: outputAmount)
+                }
+
+                if let referencePriceUSD = candidate.referencePriceUSD {
+                    FloatingIntentRow(label: "Surf 参考价", value: JSONPrettyPrinter.formatCurrency(referencePriceUSD))
+                }
+
+                if let impliedPriceUSD = candidate.impliedPriceUSD {
+                    FloatingIntentRow(label: "Uniswap 隐含价", value: JSONPrettyPrinter.formatCurrency(impliedPriceUSD))
+                }
+
+                if let priceDeviationPercent = candidate.priceDeviationPercent {
+                    FloatingIntentRow(label: "价格偏离", value: String(format: "%.2f%%", priceDeviationPercent))
                 }
 
                 if let gasFeeUSD = candidate.gasFeeUSD {

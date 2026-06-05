@@ -2,8 +2,9 @@
 set -euo pipefail
 
 MODE="${1:-run}"
-APP_NAME="AgentWallet"
-BUNDLE_ID="com.agentwallet.prototype"
+APP_NAME="ClipMind"
+LEGACY_APP_NAME="AgentWallet"
+BUNDLE_ID="com.clipmind.prototype"
 MIN_SYSTEM_VERSION="14.0"
 
 ROOT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -17,8 +18,9 @@ INFO_PLIST="$APP_CONTENTS/Info.plist"
 cd "$ROOT_DIR"
 
 pkill -x "$APP_NAME" >/dev/null 2>&1 || true
+pkill -x "$LEGACY_APP_NAME" >/dev/null 2>&1 || true
 
-swift build
+swift build --product "$APP_NAME"
 BUILD_BINARY="$(swift build --show-bin-path)/$APP_NAME"
 
 rm -rf "$APP_BUNDLE"

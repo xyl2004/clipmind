@@ -52,7 +52,7 @@ struct SidebarView: View {
                 .background(AppTheme.primaryText, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
 
             VStack(alignment: .leading, spacing: 2) {
-                Text("AgentWallet")
+                Text("ClipMind")
                     .font(.system(size: 21, weight: .bold))
                 Text("EVM Multi-chain Agent")
                     .font(.caption)
@@ -87,18 +87,36 @@ struct SidebarView: View {
 private struct WalletSidebarSection: View {
     @ObservedObject var store: AppStore
     @State private var isConfirmingDeletion = false
+    @State private var isConfirmingPrivateKeyExport = false
     @State private var deleteConfirmationText = ""
+    @State private var exportConfirmationText = ""
+    @State private var showsWalletAssets = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
             if let account = store.localWalletAccount {
-                WalletConnectedRow(
-                    account: account,
-                    chain: store.selectedTradeChain,
-                    balance: store.walletBalance,
-                    isRefreshingBalance: store.isRefreshingWalletBalance,
-                    balanceErrorMessage: store.walletBalanceErrorMessage
-                )
+                Button {
+                    showsWalletAssets.toggle()
+                    if showsWalletAssets, store.walletChainAssets.isEmpty {
+                        Task {
+                            await store.refreshSupportedWalletAssets()
+                        }
+                    }
+                } label: {
+                    WalletConnectedRow(
+                        account: account,
+                        chain: store.selectedTradeChain,
+                        balance: store.walletBalance,
+                        isRefreshingBalance: store.isRefreshingWalletBalance || store.isRefreshingWalletAssets,
+                        balanceErrorMessage: store.walletBalanceErrorMessage,
+                        isExpanded: showsWalletAssets
+                    )
+                }
+                .buttonStyle(.plain)
+
+                if showsWalletAssets {
+                    WalletAssetsPanel(store: store)
+                }
 
                 if isConfirmingDeletion {
                     DeleteWalletConfirmationCard(
@@ -111,6 +129,22 @@ private struct WalletSidebarSection: View {
                             resetDeletionConfirmation()
                         }
                     }
+                } else if isConfirmingPrivateKeyExport || store.exportedPrivateKey != nil {
+                    ExportPrivateKeyCard(
+                        account: account,
+                        confirmationText: $exportConfirmationText,
+                        privateKeyHex: store.exportedPrivateKey,
+                        onCancel: resetExportConfirmation,
+                        onReveal: store.revealLocalWalletPrivateKey,
+                        onCopyAndHide: {
+                            store.copyExportedPrivateKeyAndHide()
+                            resetExportConfirmation()
+                        },
+                        onHide: {
+                            store.hideExportedPrivateKey()
+                            resetExportConfirmation()
+                        }
+                    )
                 } else {
                     HStack(spacing: 8) {
                         Button {
@@ -122,22 +156,35 @@ private struct WalletSidebarSection: View {
                         .buttonStyle(ProductButtonStyle())
 
                         Button {
-                            store.reloadLocalWallet()
+                            Task {
+                                await store.refreshSupportedWalletAssets()
+                            }
                         } label: {
-                            if store.isRefreshingWalletBalance {
+                            if store.isRefreshingWalletBalance || store.isRefreshingWalletAssets {
                                 ProgressView()
                                     .controlSize(.small)
                                     .frame(maxWidth: .infinity)
                             } else {
-                                Label("刷新余额", systemImage: "arrow.clockwise")
+                                Label("刷新资产", systemImage: "arrow.clockwise")
                                     .frame(maxWidth: .infinity)
                             }
                         }
                         .buttonStyle(ProductButtonStyle())
-                        .disabled(store.isRefreshingWalletBalance)
+                        .disabled(store.isRefreshingWalletBalance || store.isRefreshingWalletAssets)
                     }
 
+                    Button {
+                        resetDeletionConfirmation()
+                        exportConfirmationText = ""
+                        isConfirmingPrivateKeyExport = true
+                    } label: {
+                        Label("导出私钥", systemImage: "key")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ProductButtonStyle())
+
                     Button(role: .destructive) {
+                        resetExportConfirmation()
                         deleteConfirmationText = ""
                         isConfirmingDeletion = true
                     } label: {
@@ -149,7 +196,7 @@ private struct WalletSidebarSection: View {
                     HStack(alignment: .top, spacing: 7) {
                         Image(systemName: "info.circle")
                             .foregroundStyle(AppTheme.mutedText)
-                        Text("刷新只会重新读取 Keychain 和当前链余额，不会生成新钱包。")
+                        Text("Gas 是交易手续费余额；刷新会读取支持链 Gas 和代币余额，不会生成新钱包。")
                             .font(.caption2)
                             .foregroundStyle(AppTheme.mutedText)
                             .fixedSize(horizontal: false, vertical: true)
@@ -218,6 +265,11 @@ private struct WalletSidebarSection: View {
     private func resetDeletionConfirmation() {
         isConfirmingDeletion = false
         deleteConfirmationText = ""
+    }
+
+    private func resetExportConfirmation() {
+        isConfirmingPrivateKeyExport = false
+        exportConfirmationText = ""
     }
 }
 
@@ -301,6 +353,122 @@ private struct DeleteWalletConfirmationCard: View {
     }
 }
 
+private struct ExportPrivateKeyCard: View {
+    let account: LocalWalletAccount
+    @Binding var confirmationText: String
+    let privateKeyHex: String?
+    let onCancel: () -> Void
+    let onReveal: () -> Void
+    let onCopyAndHide: () -> Void
+    let onHide: () -> Void
+
+    private var requiredSuffix: String {
+        String(account.address.suffix(4)).uppercased()
+    }
+
+    private var canReveal: Bool {
+        confirmationText
+            .trimmingCharacters(in: .whitespacesAndNewlines)
+            .uppercased() == requiredSuffix
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 9) {
+                Image(systemName: "key.fill")
+                    .font(.system(size: 15, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .frame(width: 24, height: 24)
+                    .background(.orange.opacity(0.12), in: RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(privateKeyHex == nil ? "确认导出私钥" : "私钥已显示")
+                        .font(.caption.weight(.semibold))
+                    Text("任何拿到私钥的人都可以转走该地址资产。只在离线或可信环境保存。")
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.mutedText)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+            }
+
+            if let privateKeyHex {
+                ScrollView(.horizontal, showsIndicators: false) {
+                    Text(privateKeyHex)
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(AppTheme.primaryText)
+                        .textSelection(.enabled)
+                        .padding(9)
+                }
+                .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .stroke(.orange.opacity(0.34), lineWidth: 1)
+                )
+
+                HStack(spacing: 8) {
+                    Button {
+                        onHide()
+                    } label: {
+                        Label("隐藏", systemImage: "eye.slash")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ProductButtonStyle())
+
+                    Button {
+                        onCopyAndHide()
+                    } label: {
+                        Label("复制并隐藏", systemImage: "doc.on.doc")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ProductButtonStyle(prominent: true))
+                }
+            } else {
+                Text("输入地址后 4 位 \(requiredSuffix) 继续")
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.mutedText)
+
+                TextField(requiredSuffix, text: $confirmationText)
+                    .textFieldStyle(.plain)
+                    .font(.system(.caption, design: .monospaced))
+                    .foregroundStyle(AppTheme.primaryText)
+                    .colorScheme(.light)
+                    .tint(.orange)
+                    .padding(9)
+                    .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 8, style: .continuous)
+                            .stroke(canReveal ? .orange.opacity(0.55) : AppTheme.border, lineWidth: 1)
+                    )
+
+                HStack(spacing: 8) {
+                    Button {
+                        onCancel()
+                    } label: {
+                        Label("取消", systemImage: "xmark")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ProductButtonStyle())
+
+                    Button {
+                        onReveal()
+                    } label: {
+                        Label("显示私钥", systemImage: "eye")
+                            .frame(maxWidth: .infinity)
+                    }
+                    .buttonStyle(ProductButtonStyle(prominent: true))
+                    .disabled(!canReveal)
+                }
+            }
+        }
+        .padding(10)
+        .background(.orange.opacity(0.08), in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.orange.opacity(0.26), lineWidth: 1)
+        )
+    }
+}
+
 private struct SidebarServiceSection: View {
     @ObservedObject var store: AppStore
 
@@ -314,6 +482,16 @@ private struct SidebarServiceSection: View {
                 draft: $store.apiKeyDraft,
                 status: store.apiKeyStatusMessage,
                 onSave: store.saveAPIKey
+            )
+
+            SidebarServiceRow(
+                title: "Surf",
+                subtitle: "价格和链上数据",
+                placeholder: "Surf API Key",
+                isEnabled: store.hasSurfAPIKey,
+                draft: $store.surfAPIKeyDraft,
+                status: store.surfAPIKeyStatusMessage,
+                onSave: store.saveSurfAPIKey
             )
 
             SidebarServiceRow(
@@ -607,6 +785,7 @@ private struct WalletConnectedRow: View {
     let balance: LocalWalletBalance?
     let isRefreshingBalance: Bool
     let balanceErrorMessage: String?
+    let isExpanded: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -628,11 +807,15 @@ private struct WalletConnectedRow: View {
                 }
 
                 Spacer(minLength: 0)
+
+                Image(systemName: isExpanded ? "chevron.up" : "chevron.down")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.mutedText)
             }
 
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 2) {
-                    Text("\(chain.shortName) Gas")
+                    Text("\(chain.shortName) 交易费")
                         .font(.caption2)
                         .foregroundStyle(AppTheme.mutedText)
                     Text(balanceText)
@@ -652,6 +835,11 @@ private struct WalletConnectedRow: View {
                         .foregroundStyle(AppTheme.mutedText)
                 }
             }
+
+            Text("用于支付 \(chain.displayName) 交易 Gas，不代表全部资产。")
+                .font(.caption2)
+                .foregroundStyle(AppTheme.mutedText)
+                .fixedSize(horizontal: false, vertical: true)
 
             if let balanceErrorMessage {
                 Label(balanceErrorMessage, systemImage: "exclamationmark.triangle")
@@ -683,6 +871,156 @@ private struct WalletConnectedRow: View {
         }
 
         return balance.updatedAt.formatted(date: .omitted, time: .shortened)
+    }
+}
+
+private struct WalletAssetsPanel: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                Label("支持链资产", systemImage: "square.stack.3d.up")
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.primaryText)
+
+                Spacer(minLength: 0)
+
+                if store.isRefreshingWalletAssets {
+                    ProgressView()
+                        .controlSize(.small)
+                }
+            }
+
+            if store.walletChainAssets.isEmpty {
+                SidebarEmptyRow(
+                    title: store.isRefreshingWalletAssets ? "正在读取资产" : "尚未读取资产",
+                    subtitle: "点击刷新资产，查看支持链上的 Gas 和代币余额。",
+                    systemImage: "sparkle.magnifyingglass"
+                )
+            } else {
+                LazyVStack(spacing: 8) {
+                    ForEach(store.walletChainAssets) { assets in
+                        WalletChainAssetsRow(assets: assets)
+                    }
+                }
+            }
+
+            if let message = store.walletAssetsErrorMessage {
+                Label(message, systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(10)
+        .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        )
+    }
+}
+
+private struct WalletChainAssetsRow: View {
+    let assets: WalletChainAssets
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 7) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(assets.chain.displayName)
+                    .font(.caption.weight(.semibold))
+                    .foregroundStyle(AppTheme.primaryText)
+
+                Spacer(minLength: 0)
+
+                Text(assets.assetSummary)
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.mutedText)
+                    .lineLimit(1)
+            }
+
+            HStack(alignment: .firstTextBaseline) {
+                Text("Gas")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.mutedText)
+                    .frame(width: 38, alignment: .leading)
+
+                Text(assets.gasText)
+                    .font(.system(.caption2, design: .monospaced).weight(.semibold))
+                    .foregroundStyle(assets.gasBalance?.hasGas == false ? AppTheme.rose : AppTheme.primaryText)
+                    .lineLimit(1)
+            }
+
+            if let gasErrorMessage = assets.gasErrorMessage {
+                Label(gasErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption2)
+                    .foregroundStyle(.orange)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            if assets.tokens.isEmpty {
+                Text(assets.tokenErrorMessage ?? "未发现代币余额。")
+                    .font(.caption2)
+                    .foregroundStyle(AppTheme.mutedText)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                VStack(alignment: .leading, spacing: 5) {
+                    ForEach(assets.tokens.prefix(5)) { token in
+                        WalletTokenBalanceRow(token: token)
+                    }
+
+                    if assets.tokens.count > 5 {
+                        Text("还有 \(assets.tokens.count - 5) 个代币未展开显示")
+                            .font(.caption2)
+                            .foregroundStyle(AppTheme.mutedText)
+                    }
+                }
+            }
+        }
+        .padding(9)
+        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        )
+    }
+}
+
+private struct WalletTokenBalanceRow: View {
+    let token: WalletTokenBalance
+
+    var body: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 6) {
+            VStack(alignment: .leading, spacing: 1) {
+                Text(token.displayName)
+                    .font(.caption2.weight(.semibold))
+                    .foregroundStyle(AppTheme.primaryText)
+                    .lineLimit(1)
+                if let address = token.address {
+                    Text(JSONPrettyPrinter.shortAddress(address))
+                        .font(.system(size: 10, design: .monospaced))
+                        .foregroundStyle(AppTheme.mutedText)
+                        .textSelection(.enabled)
+                }
+            }
+
+            Spacer(minLength: 0)
+
+            VStack(alignment: .trailing, spacing: 1) {
+                Text(token.balance)
+                    .font(.system(.caption2, design: .monospaced))
+                    .foregroundStyle(AppTheme.primaryText)
+                    .lineLimit(1)
+                if let usdValue = token.usdValue {
+                    Text(usdValue)
+                        .font(.caption2)
+                        .foregroundStyle(AppTheme.mutedText)
+                        .lineLimit(1)
+                }
+            }
+        }
     }
 }
 

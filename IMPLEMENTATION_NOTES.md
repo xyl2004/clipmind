@@ -1,12 +1,12 @@
-# AgentWallet 实现说明
+# ClipMind 实现说明
 
 本文档记录当前版本已经完成的工作、运行方式、技术结构和下一步方向。
 
 ## 产品方向
 
-当前原型是一个 **EVM 多链 macOS Agent Wallet 上下文助手**。
+当前原型是一个 **EVM 多链 macOS ClipMind 上下文助手**。
 
-核心思路是：用户在网页、聊天、区块浏览器或任意页面看到钱包地址、代币合约、交易哈希、项目名称或任意 Web3 文本后，可以选中文字并用快捷键唤醒 AgentWallet 悬浮对话窗。应用会把选中的内容作为上下文带入对话框，用户可以继续问 AI：“这是什么？”“这个地址有什么风险？”“这段话是什么意思？”。
+核心思路是：用户在网页、聊天、区块浏览器或任意页面看到钱包地址、代币合约、交易哈希、项目名称或任意 Web3 文本后，可以选中文字并用快捷键唤醒 ClipMind 悬浮对话窗。应用会把选中的内容作为上下文带入对话框，用户可以继续问 AI：“这是什么？”“这个地址有什么风险？”“这段话是什么意思？”。
 
 当前版本已经支持上下文问答、EVM 多链信息查询、Uniswap 报价确认单，以及用户点击确认后的本地钱包签名广播。AI 只负责解释和整理交易意图，不接触私钥，也不会自动下单。
 
@@ -16,7 +16,7 @@
 2. 使用 SwiftUI 实现了中文界面的主窗口。
 3. 增加了菜单栏入口，可以从菜单栏打开应用或查询剪贴板。
 4. 接入本地 Surf CLI，作为加密数据查询层。
-5. 支持 Ethereum、Base、Arbitrum、OP Mainnet、Polygon、Unichain，并提供“自动”多链模式。
+5. 支持 Ethereum、Base、Arbitrum、OP Mainnet、Polygon，并提供“自动”多链模式。
 6. 支持识别和查询：
    - 钱包地址
    - 代币合约地址
@@ -33,6 +33,7 @@
 15. API Key 增加进程内缓存，避免每次提问都反复读取 Keychain。
 16. 接入 Uniswap Trading API，第一版使用 `/check_approval`、`/quote`、`/swap` 生成同链 swap 确认单。
 17. 接入本地钱包第一版：支持创建/导入 EVM 私钥，私钥保存到 macOS Keychain，本机 secp256k1 签名并通过对应链 RPC 广播。
+18. 增加本地钱包私钥导出入口：用户输入地址后 4 位确认后，才会短时显示私钥，并可复制后自动隐藏。
 
 ## 数据查询能力
 
@@ -83,13 +84,13 @@ Surf CLI 会从以下路径自动寻找：
 1. 点击页面顶部的“选中文字”按钮。
 2. 使用全局快捷键 `Control + Option + W`。
 
-快捷键只负责读取当前选中文字并唤醒 AgentWallet 悬浮对话窗，不会自动开始链上查询，也不会把主窗口拉到前台。读取完成后，选中的内容会出现在“上下文对话”区域，用户可以继续输入问题让 AI 回答。
+快捷键只负责读取当前选中文字并唤醒 ClipMind 悬浮对话窗，不会自动开始链上查询，也不会把主窗口拉到前台。读取完成后，选中的内容会出现在“上下文对话”区域，用户可以继续输入问题让 AI 回答。
 
 每次成功读取新的选中文字，应用都会创建一个新的上下文会话。旧会话不会继续混在当前对话框里，而是保留在左侧“对话历史”中。
 
 读取逻辑优先使用 macOS Accessibility API 获取当前焦点应用里的选中文字。如果当前应用不直接暴露选中文本，会回退到模拟 `Command + C`，读取剪贴板内容后再恢复原剪贴板。
 
-首次使用跨应用读取时，macOS 可能要求在系统设置中给 AgentWallet 开启“辅助功能”权限。
+首次使用跨应用读取时，macOS 可能要求在系统设置中给 ClipMind 开启“辅助功能”权限。
 
 ## LLM 解读层
 
@@ -121,9 +122,10 @@ Surf 数据解读输出固定为中文，并按以下结构组织：
 
 为了避免泄露密钥，API Key 不会写入源码或文档。应用会按以下顺序读取：
 
-1. 环境变量 `AGENTWALLET_BAI_API_KEY`
-2. 环境变量 `B_AI_API_KEY`
-3. macOS Keychain 中的 `AgentWallet.BAIAPIKey`
+1. 环境变量 `CLIPMIND_BAI_API_KEY`
+2. 兼容环境变量 `AGENTWALLET_BAI_API_KEY`
+3. 环境变量 `B_AI_API_KEY`
+4. macOS Keychain 中的 `AgentWallet.BAIAPIKey`（保留旧 service 名以兼容已保存密钥）
 
 读取到 API Key 后会缓存在当前进程内。这样同一次应用运行期间后续提问不会反复触发 Keychain 读取，也就不会每次都弹出系统密码确认。
 
@@ -131,17 +133,18 @@ Surf 数据解读输出固定为中文，并按以下结构组织：
 
 当前版本已经可以在用户点击确认后本机签名并广播交易，但仍然保持清晰的安全边界：
 
-- 私钥只保存到 macOS Keychain 的 `AgentWallet.LocalPrivateKey`。
+- 私钥只保存到 macOS Keychain 的 `AgentWallet.LocalPrivateKey`（保留旧 service 名以兼容已创建钱包）。
 - 不保存助记词。
 - 不把私钥写入项目目录或日志。
 - LLM 不读取私钥，也不直接调用签名函数。
+- 用户可以在本地钱包区域二次确认后导出私钥；导出内容只显示在本地 UI，不发送给 LLM。
 - 每次广播都需要用户点击确认按钮。
 - 需要授权的 ERC-20 swap 会先广播授权交易；授权上链后需要重新生成报价再签名兑换。
 
 当前支持的交易路径：
 
 1. 用户输入类似“买 20 USDC 的这个币”或手动填写交易区。
-2. AgentWallet 通过 Uniswap API 生成确认单。
+2. ClipMind 通过 Uniswap API 生成确认单。
 3. 用户检查链、支付资产、目标代币、预计收到、Gas、授权需求和风险提示。
 4. 用户点击“本机签名授权”或“本机签名兑换”。
 5. App 使用 web3swift + secp256k1 在本机签名，通过当前链 RPC 广播。
@@ -156,12 +159,13 @@ Surf 数据解读输出固定为中文，并按以下结构组织：
 
 | 链 | 环境变量 |
 | --- | --- |
-| Ethereum | `AGENTWALLET_RPC_ETHEREUM` |
-| Base | `AGENTWALLET_RPC_BASE` |
-| Arbitrum | `AGENTWALLET_RPC_ARBITRUM` |
-| OP Mainnet | `AGENTWALLET_RPC_OPTIMISM` |
-| Polygon | `AGENTWALLET_RPC_POLYGON` |
-| Unichain | `AGENTWALLET_RPC_UNICHAIN` |
+| Ethereum | `CLIPMIND_RPC_ETHEREUM` |
+| Base | `CLIPMIND_RPC_BASE` |
+| Arbitrum | `CLIPMIND_RPC_ARBITRUM` |
+| OP Mainnet | `CLIPMIND_RPC_OPTIMISM` |
+| Polygon | `CLIPMIND_RPC_POLYGON` |
+
+旧的 `AGENTWALLET_RPC_*` 环境变量仍然兼容。
 
 ## 文件结构
 
@@ -204,11 +208,22 @@ Sources/AgentWallet/Views/
 ./script/build_and_run.sh --verify
 ```
 
+核心自动化自检：
+
+```bash
+./script/test.sh
+```
+
+当前自检通过 `swift run ClipMind --self-test-core` 执行，不依赖真实网络，也不读取真实钱包 Keychain service。覆盖范围包括：钱包意图解析、转账确认单构建、交易广播前校验、链配置、钱包资产解析、Surf 钱包资产 JSON 解析、本地钱包私钥导出和导出状态清理。
+
+当前工作区的 Swift 工具链没有暴露 `XCTest` 或 Swift `Testing` 模块，所以 `swift test` 暂时不是可用入口。
+
 当前已经验证：
 
 - `swift build` 成功。
+- `./script/test.sh` 成功。
 - `./script/build_and_run.sh --verify` 成功。
-- `AgentWallet` 进程可以正常启动。
+- `ClipMind` 进程可以正常启动。
 
 ## 下一步建议
 

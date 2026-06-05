@@ -25,6 +25,9 @@ final class AppStore: ObservableObject {
     @Published var apiKeyDraft: String = ""
     @Published var apiKeyStatusMessage: String?
     @Published var hasLLMAPIKey = CredentialStore.hasBAIAPIKey()
+    @Published var surfAPIKeyDraft: String = ""
+    @Published var surfAPIKeyStatusMessage: String?
+    @Published var hasSurfAPIKey = CredentialStore.hasSurfAPIKey()
     @Published var uniswapAPIKeyDraft: String = ""
     @Published var uniswapAPIKeyStatusMessage: String?
     @Published var hasUniswapAPIKey = CredentialStore.hasUniswapAPIKey()
@@ -33,15 +36,20 @@ final class AppStore: ObservableObject {
     @Published var tradeDraft = TradeIntentDraft()
     @Published var localWalletAccount: LocalWalletAccount?
     @Published var walletBalance: LocalWalletBalance?
+    @Published var walletChainAssets: [WalletChainAssets] = []
     @Published var isRefreshingWalletBalance = false
+    @Published var isRefreshingWalletAssets = false
     @Published var walletBalanceErrorMessage: String?
+    @Published var walletAssetsErrorMessage: String?
     @Published var privateKeyDraft: String = ""
+    @Published var exportedPrivateKey: String?
     @Published var walletStatusMessage: String?
     @Published var tradePlan: UniswapTradePlan?
     @Published var tradeConfirmationText: String = ""
     @Published var floatingWalletIntent: WalletIntentDraft?
     @Published var swapTokenCandidates: [UniswapTokenCandidate] = []
     @Published var selectedSwapTokenCandidate: UniswapTokenCandidate?
+    @Published var swapPriceAnchor: TokenPriceAnchor?
     @Published var transferPlan: TransferPlan?
     @Published var transferConfirmationText: String = ""
     @Published var floatingWalletActionStatusMessage: String?
@@ -55,13 +63,23 @@ final class AppStore: ObservableObject {
     @Published var tradeErrorMessage: String?
     @Published var tradeHistory: [TradeHistoryItem] = []
 
-    private let surfClient = SurfClient()
-    private let llmClient = LLMClient()
-    private let tradeProvider = UniswapTradeProvider()
-    private let localWalletClient = LocalWalletClient()
+    private let surfClient: SurfClient
+    private let llmClient: LLMClient
+    private let tradeProvider: UniswapTradeProvider
+    private let localWalletClient: LocalWalletClient
     private var selectedTextSourceRect: CGRect?
 
-    init() {
+    init(
+        surfClient: SurfClient = SurfClient(),
+        llmClient: LLMClient = LLMClient(),
+        tradeProvider: UniswapTradeProvider = UniswapTradeProvider(),
+        localWalletClient: LocalWalletClient = LocalWalletClient()
+    ) {
+        self.surfClient = surfClient
+        self.llmClient = llmClient
+        self.tradeProvider = tradeProvider
+        self.localWalletClient = localWalletClient
+
         do {
             localWalletAccount = try localWalletClient.loadAccount()
             if localWalletAccount != nil {
@@ -155,7 +173,7 @@ final class AppStore: ObservableObject {
 
     func showMainWindow() {
         NSApp.activate(ignoringOtherApps: true)
-        for window in NSApp.windows where window.title.contains("AgentWallet") {
+        for window in NSApp.windows where window.title.contains("ClipMind") {
             window.makeKeyAndOrderFront(nil)
             return
         }
@@ -234,6 +252,18 @@ final class AppStore: ObservableObject {
         }
     }
 
+    func saveSurfAPIKey() {
+        do {
+            try CredentialStore.saveSurfAPIKey(surfAPIKeyDraft)
+            surfAPIKeyDraft = ""
+            hasSurfAPIKey = true
+            surfAPIKeyStatusMessage = "Surf API Key 已保存到 Keychain。"
+            floatingWalletActionErrorMessage = nil
+        } catch {
+            surfAPIKeyStatusMessage = error.localizedDescription
+        }
+    }
+
     func saveUniswapAPIKey() {
         do {
             try CredentialStore.saveUniswapAPIKey(uniswapAPIKeyDraft)
@@ -308,7 +338,10 @@ final class AppStore: ObservableObject {
             let account = try localWalletClient.createWallet()
             localWalletAccount = account
             walletBalance = nil
+            walletChainAssets = []
             walletBalanceErrorMessage = nil
+            walletAssetsErrorMessage = nil
+            exportedPrivateKey = nil
             resetFloatingWalletAction(clearTradePlan: true)
             privateKeyDraft = ""
             walletStatusMessage = "已创建本地钱包：\(account.shortAddress)。请先给该地址转入交易所需资产和 Gas。"
@@ -326,7 +359,10 @@ final class AppStore: ObservableObject {
             let account = try localWalletClient.importWallet(privateKeyHex: privateKeyDraft)
             localWalletAccount = account
             walletBalance = nil
+            walletChainAssets = []
             walletBalanceErrorMessage = nil
+            walletAssetsErrorMessage = nil
+            exportedPrivateKey = nil
             resetFloatingWalletAction(clearTradePlan: true)
             privateKeyDraft = ""
             walletStatusMessage = "已导入本地钱包：\(account.shortAddress)。私钥仅保存到 macOS Keychain。"
@@ -348,7 +384,10 @@ final class AppStore: ObservableObject {
 
             localWalletAccount = account
             walletBalance = nil
+            walletChainAssets = []
             walletBalanceErrorMessage = nil
+            walletAssetsErrorMessage = nil
+            exportedPrivateKey = nil
             resetFloatingWalletAction(clearTradePlan: true)
             walletStatusMessage = "已解锁本地钱包：\(account.shortAddress)。"
             Task {
@@ -364,8 +403,11 @@ final class AppStore: ObservableObject {
             try localWalletClient.deleteWallet()
             localWalletAccount = nil
             walletBalance = nil
+            walletChainAssets = []
             walletBalanceErrorMessage = nil
+            walletAssetsErrorMessage = nil
             privateKeyDraft = ""
+            exportedPrivateKey = nil
             resetFloatingWalletAction(clearTradePlan: true)
             walletStatusMessage = "已从 Keychain 删除本地钱包私钥。"
         } catch {
@@ -376,9 +418,13 @@ final class AppStore: ObservableObject {
     func reloadLocalWallet() {
         do {
             localWalletAccount = try localWalletClient.loadAccount()
+            exportedPrivateKey = nil
             if localWalletAccount == nil {
                 walletBalance = nil
+                walletChainAssets = []
                 walletBalanceErrorMessage = nil
+                walletAssetsErrorMessage = nil
+                exportedPrivateKey = nil
                 resetFloatingWalletAction(clearTradePlan: true)
                 walletStatusMessage = "当前没有本地钱包。"
             } else {
@@ -403,6 +449,38 @@ final class AppStore: ObservableObject {
         walletStatusMessage = "钱包地址已复制。"
     }
 
+    func revealLocalWalletPrivateKey() {
+        guard localWalletAccount != nil else {
+            walletStatusMessage = "当前没有可导出的本地钱包。"
+            return
+        }
+
+        do {
+            exportedPrivateKey = try localWalletClient.exportPrivateKeyHex()
+            walletStatusMessage = "私钥已从 Keychain 读取。请只在安全环境中使用。"
+        } catch {
+            exportedPrivateKey = nil
+            walletStatusMessage = error.localizedDescription
+        }
+    }
+
+    func copyExportedPrivateKeyAndHide() {
+        guard let exportedPrivateKey else {
+            walletStatusMessage = "当前没有可复制的私钥。"
+            return
+        }
+
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(exportedPrivateKey, forType: .string)
+        self.exportedPrivateKey = nil
+        walletStatusMessage = "私钥已复制到剪贴板，并已在 ClipMind 中隐藏。请妥善保存后清空剪贴板。"
+    }
+
+    func hideExportedPrivateKey() {
+        exportedPrivateKey = nil
+        walletStatusMessage = "已隐藏导出的私钥。"
+    }
+
     func refreshWalletBalance() async {
         guard let account = localWalletAccount else {
             walletBalance = nil
@@ -422,6 +500,69 @@ final class AppStore: ObservableObject {
         }
 
         isRefreshingWalletBalance = false
+    }
+
+    func refreshSupportedWalletAssets() async {
+        guard let account = localWalletAccount else {
+            walletBalance = nil
+            walletChainAssets = []
+            walletBalanceErrorMessage = nil
+            walletAssetsErrorMessage = nil
+            return
+        }
+
+        isRefreshingWalletAssets = true
+        walletAssetsErrorMessage = nil
+        walletBalanceErrorMessage = nil
+
+        var tokenAssetsByChain: [String: WalletChainTokenAssets] = [:]
+        do {
+            let tokenAssets = try await surfClient.walletTokenAssets(
+                address: account.address,
+                chains: ChainRegistry.supported
+            )
+            tokenAssetsByChain = Dictionary(uniqueKeysWithValues: tokenAssets.map { ($0.chain.id, $0) })
+        } catch {
+            walletAssetsErrorMessage = "Surf 代币余额读取失败：\(error.localizedDescription)"
+        }
+
+        var chainAssets: [WalletChainAssets] = []
+        for chain in ChainRegistry.supported {
+            let gasBalance: LocalWalletBalance?
+            let gasErrorMessage: String?
+
+            do {
+                let balance = try await localWalletClient.fetchNativeBalance(for: account, chain: chain)
+                gasBalance = balance
+                gasErrorMessage = nil
+                if chain.id == selectedTradeChain.id {
+                    walletBalance = balance
+                }
+            } catch {
+                gasBalance = nil
+                gasErrorMessage = error.localizedDescription
+                if chain.id == selectedTradeChain.id {
+                    walletBalanceErrorMessage = error.localizedDescription
+                }
+            }
+
+            let tokenAssets = tokenAssetsByChain[chain.id]
+            chainAssets.append(
+                WalletChainAssets(
+                    chain: chain,
+                    gasBalance: gasBalance,
+                    gasErrorMessage: gasErrorMessage,
+                    tokens: tokenAssets?.tokens ?? [],
+                    totalUSD: tokenAssets?.totalUSD,
+                    tokenErrorMessage: tokenAssets?.errorMessage ?? walletAssetsErrorMessage,
+                    updatedAt: Date()
+                )
+            )
+        }
+
+        walletChainAssets = chainAssets
+        walletStatusMessage = "已刷新支持链 Gas 和代币余额。"
+        isRefreshingWalletAssets = false
     }
 
     func useExample(_ example: QueryExample) {
@@ -798,6 +939,7 @@ final class AppStore: ObservableObject {
         isResolvingSwapTokenCandidates = false
         swapTokenCandidates = []
         selectedSwapTokenCandidate = nil
+        swapPriceAnchor = nil
         isSigningTransfer = false
         if clearTradePlan {
             tradePlan = nil
@@ -810,10 +952,12 @@ final class AppStore: ObservableObject {
         question: String,
         sessionID: ContextChatSession.ID?
     ) async -> Bool {
+        let previousIntent = floatingWalletIntent
         let intent = WalletIntentParser.parse(
             selectedText: context,
             question: question,
-            chain: selectedTradeChain
+            chain: selectedTradeChain,
+            continuing: previousIntent
         )
         guard intent.action != .ask else {
             return false
@@ -898,39 +1042,57 @@ final class AppStore: ObservableObject {
         isResolvingSwapTokenCandidates = true
         swapTokenCandidates = []
         selectedSwapTokenCandidate = nil
-        floatingWalletActionStatusMessage = "正在从 Uniswap 搜索 \(query)，并探测 \(intent.spendAmount) \(intent.spendAsset.symbol) 的可成交流动性。"
+        let chains = swapCandidateChains(for: intent)
+        let chainSummary = chains.count == 1 ? chains[0].displayName : "支持链"
+        floatingWalletActionStatusMessage = "正在从 Surf 获取 \(query) 的最近价格。"
         floatingWalletActionErrorMessage = nil
 
         let quoteWalletAddress = localWalletAccount?.address ?? "0x000000000000000000000000000000000000dEaD"
+        let priceAnchorResult = await fetchSwapPriceAnchor(for: query)
+        swapPriceAnchor = priceAnchorResult.anchor
+        if let anchor = priceAnchorResult.anchor {
+            let changeText = anchor.formattedChange.map { "，24h \($0)" } ?? ""
+            floatingWalletActionStatusMessage = "Surf 参考价：\(anchor.symbol) \(anchor.formattedPrice)\(changeText)。正在从 Uniswap 在 \(chainSummary) 探测可成交流动性。"
+        } else if let errorMessage = priceAnchorResult.errorMessage {
+            floatingWalletActionStatusMessage = "Surf 价格暂不可用：\(errorMessage)。仍会从 Uniswap 在 \(chainSummary) 探测候选。"
+        } else {
+            floatingWalletActionStatusMessage = "正在从 Uniswap 搜索 \(query)，并在 \(chainSummary) 探测 \(intent.spendAmount) \(intent.spendAsset.symbol) 的可成交流动性。"
+        }
 
-        do {
-            let candidates = try await tradeProvider.resolveTokenCandidates(
-                query: query,
-                chain: intent.chain,
-                spendAsset: intent.spendAsset,
-                spendAmount: intent.spendAmount,
-                walletAddress: quoteWalletAddress
-            )
-            swapTokenCandidates = candidates
-
-            if candidates.isEmpty {
-                let message = "Uniswap token list 里没有找到 \(intent.chain.displayName) 上和 \(query) 匹配的候选。请改用明确合约地址。"
-                floatingWalletActionStatusMessage = nil
-                floatingWalletActionErrorMessage = message
-                appendMessage(ContextChatMessage(role: .assistant, text: message), to: sessionID)
-            } else {
-                let quotedCount = candidates.filter(\.canSelectForSwap).count
-                let highRiskCount = candidates.filter { $0.riskLevel == .high }.count
-                let blockedCount = candidates.filter { $0.riskLevel == .blocked }.count
-                let message = "找到 \(candidates.count) 个候选，其中 \(quotedCount) 个可选择，\(highRiskCount) 个高风险，\(blockedCount) 个已拦截。请先看合约风险和流动性，再选择合约生成签名确认单。"
-                floatingWalletActionStatusMessage = message
-                floatingWalletActionErrorMessage = nil
-                appendMessage(ContextChatMessage(role: .assistant, text: message), to: sessionID)
+        var resolvedCandidates: [UniswapTokenCandidate] = []
+        var chainErrors: [String] = []
+        for chain in chains {
+            do {
+                let candidates = try await tradeProvider.resolveTokenCandidates(
+                    query: query,
+                    chain: chain,
+                    spendAsset: swapSpendAsset(for: intent, chain: chain),
+                    spendAmount: intent.spendAmount,
+                    walletAddress: quoteWalletAddress,
+                    referencePriceUSD: priceAnchorResult.anchor?.priceUSD
+                )
+                resolvedCandidates.append(contentsOf: candidates)
+            } catch {
+                chainErrors.append("\(chain.displayName)：\(error.localizedDescription)")
             }
-        } catch {
-            let message = error.localizedDescription
+        }
+        let candidates = sortedSwapCandidates(resolvedCandidates)
+        swapTokenCandidates = candidates
+
+        if candidates.isEmpty {
+            let errorSuffix = chainErrors.isEmpty ? "" : " 错误：\(chainErrors.prefix(2).joined(separator: "；"))"
+            let message = "Uniswap token list 里没有找到 \(chainSummary) 上和 \(query) 匹配的候选。请改用明确合约地址。\(errorSuffix)"
             floatingWalletActionStatusMessage = nil
             floatingWalletActionErrorMessage = message
+            appendMessage(ContextChatMessage(role: .assistant, text: message), to: sessionID)
+        } else {
+            let quotedCount = candidates.filter(\.canSelectForSwap).count
+            let highRiskCount = candidates.filter { $0.riskLevel == .high }.count
+            let blockedCount = candidates.filter { $0.riskLevel == .blocked }.count
+            let priceText = priceAnchorResult.anchor.map { "Surf 参考价 \($0.formattedPrice)，已按 Uniswap 隐含价接近程度排序。" } ?? "未拿到 Surf 参考价，已按可报价、风险和匹配精度排序。"
+            let message = "找到 \(candidates.count) 个候选，其中 \(quotedCount) 个可选择，\(highRiskCount) 个高风险，\(blockedCount) 个已拦截。\(priceText) 请先看链、合约风险和流动性，再选择合约生成签名确认单。"
+            floatingWalletActionStatusMessage = message
+            floatingWalletActionErrorMessage = nil
             appendMessage(ContextChatMessage(role: .assistant, text: message), to: sessionID)
         }
 
@@ -948,15 +1110,37 @@ final class AppStore: ObservableObject {
             return
         }
 
+        let spendAsset = swapSpendAsset(for: intent, chain: candidate.chain)
+        selectedChainID = candidate.chain.id
+        floatingWalletIntent = WalletIntentDraft(
+            action: intent.action,
+            selectedContext: intent.selectedContext,
+            targetAddress: candidate.address,
+            targetQuery: intent.targetQuery,
+            chain: candidate.chain,
+            spendAsset: spendAsset,
+            spendAmount: intent.spendAmount,
+            recipientAddress: "",
+            slippage: intent.slippage,
+            missingFields: [],
+            riskNotes: intent.riskNotes,
+            confirmationSummary: "准备在 \(candidate.chain.displayName) 用 \(intent.spendAmount) \(spendAsset.symbol) 购买 \(candidate.symbol) \(candidate.shortAddress)。"
+        )
+        if localWalletAccount != nil, walletBalance?.chain.id != candidate.chain.id {
+            Task {
+                await refreshWalletBalance()
+            }
+        }
+
         selectedSwapTokenCandidate = candidate
         tradeDraft.spendAmount = intent.spendAmount
-        tradeDraft.spendTokenSymbol = intent.spendAsset.symbol
-        tradeDraft.spendTokenAddress = intent.spendAsset.address
-        tradeDraft.spendTokenDecimals = intent.spendAsset.decimals
+        tradeDraft.spendTokenSymbol = spendAsset.symbol
+        tradeDraft.spendTokenAddress = spendAsset.address
+        tradeDraft.spendTokenDecimals = spendAsset.decimals
         tradeDraft.tokenAddress = candidate.address
         tradeDraft.slippage = intent.slippage
         let riskNotice = candidate.riskLevel == .high ? "这是高风险候选，请再次核对风险原因。" : "风险等级：\(candidate.riskLevel.title)。"
-        floatingWalletActionStatusMessage = "已选择 \(candidate.symbol) \(candidate.shortAddress)。\(riskNotice) 正在生成正式 Uniswap 确认单。"
+        floatingWalletActionStatusMessage = "已选择 \(candidate.chain.displayName) 上的 \(candidate.symbol) \(candidate.shortAddress)。\(riskNotice) 正在生成正式 Uniswap 确认单。"
         floatingWalletActionErrorMessage = nil
 
         await buildTradePlan()
@@ -966,6 +1150,69 @@ final class AppStore: ObservableObject {
         } else {
             floatingWalletActionStatusMessage = nil
             floatingWalletActionErrorMessage = tradeErrorMessage ?? "生成买币确认单失败。"
+        }
+    }
+
+    private func swapCandidateChains(for intent: WalletIntentDraft) -> [ChainProfile] {
+        if !intent.targetAddress.isEmpty {
+            return [intent.chain]
+        }
+
+        if selectedChainFilter.profile != nil {
+            return [intent.chain]
+        }
+
+        return ChainRegistry.supported.filter(\.supportsSwap)
+    }
+
+    private func swapSpendAsset(for intent: WalletIntentDraft, chain: ChainProfile) -> TokenProfile {
+        let symbol = intent.spendAsset.symbol.uppercased()
+        if symbol == "ETH" {
+            return .nativeETH
+        }
+
+        if symbol == "USDC", chain.defaultSpendToken.symbol.uppercased() == "USDC" {
+            return chain.defaultSpendToken
+        }
+
+        return intent.spendAsset
+    }
+
+    private func fetchSwapPriceAnchor(for query: String) async -> (anchor: TokenPriceAnchor?, errorMessage: String?) {
+        do {
+            return (try await surfClient.tokenPriceAnchor(symbol: query), nil)
+        } catch {
+            return (nil, error.localizedDescription)
+        }
+    }
+
+    private func sortedSwapCandidates(_ candidates: [UniswapTokenCandidate]) -> [UniswapTokenCandidate] {
+        candidates.sorted { lhs, rhs in
+            if lhs.status != rhs.status {
+                return lhs.status == .quoted
+            }
+            if lhs.priceDeviationPercent != rhs.priceDeviationPercent {
+                switch (lhs.priceDeviationPercent, rhs.priceDeviationPercent) {
+                case let (left?, right?):
+                    return left < right
+                case (_?, nil):
+                    return true
+                case (nil, _?):
+                    return false
+                case (nil, nil):
+                    break
+                }
+            }
+            if lhs.riskLevel != rhs.riskLevel {
+                return lhs.riskLevel.rawValue < rhs.riskLevel.rawValue
+            }
+            if lhs.rank != rhs.rank {
+                return lhs.rank < rhs.rank
+            }
+            if lhs.chain.chainID != rhs.chain.chainID {
+                return lhs.chain.chainID < rhs.chain.chainID
+            }
+            return lhs.name < rhs.name
         }
     }
 
