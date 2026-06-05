@@ -12,6 +12,7 @@ enum CoreSelfTests {
         try await testIntentClassifierStub(&suite)
         try testIntentClassifierPrompt(&suite)
         try await testAppStoreIntentDispatch(&suite)
+        try await testAppStoreCheckActions(&suite)
         try testTransferPlanBuilder(&suite)
         try testTransactionSafety(&suite)
         try testTradeIntentDraft(&suite)
@@ -411,6 +412,52 @@ enum CoreSelfTests {
         await store3.askAboutSelectedContext()
         try suite.equal(unusedStub.callCount, 0, "rule mode skips LLM classifier")
         try suite.equal(store3.floatingWalletIntent?.action, WalletIntentAction.transfer, "rule mode still produces intent via parser")
+    }
+
+    @MainActor
+    private static func testAppStoreCheckActions(_ suite: inout CoreSelfTestSuite) async throws {
+        let isolatedClient = isolatedWalletClient()
+        defer { try? isolatedClient.deleteWallet() }
+
+        let balanceJSON = """
+        {"action":"check_balance","chain":null,"target_address":"","target_query":"","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+        """
+        let store = AppStore(
+            localWalletClient: isolatedClient,
+            intentClassifier: IntentClassifier(backend: StubIntentClassifierBackend(responses: [.success(balanceJSON)])),
+            intentBackendMode: .auto
+        )
+        store.input = "余额"
+        store.chatQuestion = "查一下我的钱包余额"
+        await store.askAboutSelectedContext()
+        try suite.check(
+            store.chatMessages.last?.text.contains("还没有本地钱包") == true,
+            "check_balance no-wallet shows specific guidance message"
+        )
+
+        let degradeJSON = """
+        {"action":"check_address","chain":null,"target_address":"","target_query":"uniswap","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+        """
+        let store2 = AppStore(
+            intentClassifier: IntentClassifier(backend: StubIntentClassifierBackend(responses: [.success(degradeJSON)])),
+            intentBackendMode: .auto
+        )
+        store2.input = "uniswap"
+        store2.chatQuestion = "这个项目什么风险"
+        await store2.askAboutSelectedContext()
+        try suite.equal(store2.errorMessage, nil, "check_address degraded path does not set errorMessage")
+
+        let askyTxJSON = """
+        {"action":"check_tx","chain":null,"target_address":"","target_query":"","transaction_hash":"","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+        """
+        let store3 = AppStore(
+            intentClassifier: IntentClassifier(backend: StubIntentClassifierBackend(responses: [.success(askyTxJSON)])),
+            intentBackendMode: .auto
+        )
+        store3.input = "随便"
+        store3.chatQuestion = "这笔交易怎么样"
+        await store3.askAboutSelectedContext()
+        try suite.equal(store3.errorMessage, nil, "check_tx degraded path does not set errorMessage")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {

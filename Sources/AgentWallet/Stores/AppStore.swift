@@ -1029,9 +1029,143 @@ final class AppStore: ObservableObject {
                 return false
             }
             return await dispatchRuleDraft(draft, sessionID: sessionID)
-        case .checkBalance, .checkToken, .checkTx, .checkAddress:
-            // Implemented in Task 13. For now, behave as ask.
+        case .checkBalance:
+            await handleCheckBalance(sessionID: sessionID)
+            return true
+        case .checkAddress:
+            return await handleCheckAddress(intent, sessionID: sessionID)
+        case .checkToken:
+            return await handleCheckToken(intent, sessionID: sessionID)
+        case .checkTx:
+            return await handleCheckTx(intent, sessionID: sessionID)
+        }
+    }
+
+    private func handleCheckBalance(sessionID: ContextChatSession.ID?) async {
+        guard localWalletAccount != nil else {
+            let message = "还没有本地钱包。请先在主窗口创建或导入，再来查余额。"
+            appendMessage(ContextChatMessage(role: .assistant, text: message), to: sessionID)
+            return
+        }
+        appendMessage(ContextChatMessage(role: .assistant, text: "正在刷新本地钱包各链余额，请稍候。"), to: sessionID)
+        await refreshSupportedWalletAssets()
+        let summary = buildBalanceSummary()
+        appendMessage(ContextChatMessage(role: .assistant, text: summary), to: sessionID)
+    }
+
+    private func buildBalanceSummary() -> String {
+        guard !walletChainAssets.isEmpty else {
+            return "暂无可用余额数据，请稍后重试。"
+        }
+        let lines = walletChainAssets.map { assets -> String in
+            "\(assets.chain.displayName): Gas \(assets.gasText) · \(assets.assetSummary)"
+        }
+        return (["本地钱包余额："] + lines).joined(separator: "\n")
+    }
+
+    private func handleCheckAddress(_ intent: StructuredIntent, sessionID: ContextChatSession.ID?) async -> Bool {
+        if !intent.targetAddress.isEmpty {
+            await runCheckResearch(
+                query: intent.targetAddress,
+                kind: .wallet,
+                chainID: intent.chain,
+                sessionID: sessionID
+            )
+            return true
+        }
+
+        if !intent.targetQuery.isEmpty {
+            await runCheckResearch(
+                query: intent.targetQuery,
+                kind: .project,
+                chainID: intent.chain,
+                sessionID: sessionID
+            )
+            return true
+        }
+
+        return false
+    }
+
+    private func handleCheckToken(_ intent: StructuredIntent, sessionID: ContextChatSession.ID?) async -> Bool {
+        if !intent.targetAddress.isEmpty {
+            await runCheckResearch(
+                query: intent.targetAddress,
+                kind: .token,
+                chainID: intent.chain,
+                sessionID: sessionID
+            )
+            return true
+        }
+
+        if !intent.targetQuery.isEmpty {
+            await runCheckResearch(
+                query: intent.targetQuery,
+                kind: .project,
+                chainID: intent.chain,
+                sessionID: sessionID
+            )
+            return true
+        }
+
+        return false
+    }
+
+    private func handleCheckTx(_ intent: StructuredIntent, sessionID: ContextChatSession.ID?) async -> Bool {
+        guard !intent.transactionHash.isEmpty else {
             return false
+        }
+        await runCheckResearch(
+            query: intent.transactionHash,
+            kind: .transaction,
+            chainID: intent.chain,
+            sessionID: sessionID
+        )
+        return true
+    }
+
+    private func runCheckResearch(
+        query: String,
+        kind: QueryKind,
+        chainID: String?,
+        sessionID: ContextChatSession.ID?
+    ) async {
+        appendMessage(
+            ContextChatMessage(
+                role: .assistant,
+                text: "正在用 Surf 查 \(query) 的链上信息，完整证据会在主窗口展开。"
+            ),
+            to: sessionID
+        )
+        input = query
+        if let chainID, let profile = ChainRegistry.profile(for: chainID) {
+            selectedChainID = profile.id
+        }
+
+        let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else {
+            return
+        }
+
+        isLoading = true
+        aiExplanation = nil
+        llmErrorMessage = nil
+        errorMessage = nil
+
+        do {
+            let snapshot = try await surfClient.research(
+                query: trimmed,
+                kind: kind,
+                chainFilter: selectedChainFilter
+            )
+            result = snapshot
+            contextDetailSnapshot = snapshot
+            syncActiveSessionSnapshot(snapshot)
+            isLoading = false
+            await runLLMExplanation()
+        } catch {
+            errorMessage = error.localizedDescription
+            isLoading = false
         }
     }
 
