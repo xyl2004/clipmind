@@ -974,12 +974,71 @@ final class AppStore: ObservableObject {
         sessionID: ContextChatSession.ID?
     ) async -> Bool {
         let previousIntent = floatingWalletIntent
-        let intent = WalletIntentParser.parse(
+        let chain = selectedTradeChain
+
+        if !intentBackendMode.skipsLLM {
+            do {
+                let structured = try await intentClassifier.classify(
+                    selectedContext: context,
+                    previousIntent: previousIntent,
+                    chainHint: chain.id,
+                    question: question
+                )
+                if let handled = await dispatchStructuredIntent(
+                    structured,
+                    context: context,
+                    sessionID: sessionID
+                ) {
+                    return handled
+                }
+            } catch {
+                llmErrorMessage = "意图分类降级：\(error.localizedDescription)"
+            }
+        }
+
+        let draft = WalletIntentParser.parse(
             selectedText: context,
             question: question,
-            chain: selectedTradeChain,
+            chain: chain,
             continuing: previousIntent
         )
+        return await dispatchRuleDraft(draft, sessionID: sessionID)
+    }
+
+    /// Returns nil when the structured intent maps to a draft action whose
+    /// handling matches the existing rule-based flow (so we delegate to the
+    /// shared dispatcher). Returns true/false for actions handled inline
+    /// (check_*, unsupported, ask).
+    private func dispatchStructuredIntent(
+        _ intent: StructuredIntent,
+        context: String,
+        sessionID: ContextChatSession.ID?
+    ) async -> Bool? {
+        switch intent.action {
+        case .ask:
+            return false
+        case .unsupported:
+            let reason = intent.unsupportedReason.isEmpty ? "这个操作暂不支持。" : intent.unsupportedReason
+            appendMessage(ContextChatMessage(role: .assistant, text: reason), to: sessionID)
+            return true
+        case .transfer, .swap:
+            guard let draft = intent.toWalletIntentDraft(
+                selectedContext: context,
+                fallbackChain: selectedTradeChain
+            ) else {
+                return false
+            }
+            return await dispatchRuleDraft(draft, sessionID: sessionID)
+        case .checkBalance, .checkToken, .checkTx, .checkAddress:
+            // Implemented in Task 13. For now, behave as ask.
+            return false
+        }
+    }
+
+    private func dispatchRuleDraft(
+        _ intent: WalletIntentDraft,
+        sessionID: ContextChatSession.ID?
+    ) async -> Bool {
         guard intent.action != .ask else {
             return false
         }

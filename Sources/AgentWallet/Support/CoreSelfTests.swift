@@ -11,6 +11,7 @@ enum CoreSelfTests {
         try testStructuredIntentAdapter(&suite)
         try await testIntentClassifierStub(&suite)
         try testIntentClassifierPrompt(&suite)
+        try await testAppStoreIntentDispatch(&suite)
         try testTransferPlanBuilder(&suite)
         try testTransactionSafety(&suite)
         try testTradeIntentDraft(&suite)
@@ -368,6 +369,48 @@ enum CoreSelfTests {
             question: "?"
         )
         try suite.check(truncated.count < longContext.count, "user payload truncates oversized selected context")
+    }
+
+    @MainActor
+    private static func testAppStoreIntentDispatch(_ suite: inout CoreSelfTestSuite) async throws {
+        let swapJSON = """
+        {"action":"swap","chain":"base","target_address":"0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913","target_query":"","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":null,"unsupported_reason":""}
+        """
+        let stub = StubIntentClassifierBackend(responses: [.success(swapJSON)])
+        let store = AppStore(
+            intentClassifier: IntentClassifier(backend: stub),
+            intentBackendMode: .auto
+        )
+        store.input = "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+        store.chatQuestion = "用 5u 买这个"
+        await store.askAboutSelectedContext()
+        try suite.equal(store.floatingWalletIntent?.action, WalletIntentAction.swap, "stub swap intent applied to store")
+        try suite.equal(stub.callCount, 1, "store calls classifier once")
+
+        let failingStub = StubIntentClassifierBackend(responses: [
+            .success("not json"),
+            .success("still not json")
+        ])
+        let store2 = AppStore(
+            intentClassifier: IntentClassifier(backend: failingStub),
+            intentBackendMode: .auto
+        )
+        store2.input = "0x2222222222222222222222222222222222222222"
+        store2.chatQuestion = "给这个地址转 5 USDC"
+        await store2.askAboutSelectedContext()
+        try suite.equal(store2.floatingWalletIntent?.action, WalletIntentAction.transfer, "rules fallback produced transfer intent")
+        try suite.equal(store2.floatingWalletIntent?.spendAmount, "5", "rules fallback parsed amount")
+
+        let unusedStub = StubIntentClassifierBackend(responses: [])
+        let store3 = AppStore(
+            intentClassifier: IntentClassifier(backend: unusedStub),
+            intentBackendMode: .rule
+        )
+        store3.input = "0x2222222222222222222222222222222222222222"
+        store3.chatQuestion = "给这个地址转 5 USDC"
+        await store3.askAboutSelectedContext()
+        try suite.equal(unusedStub.callCount, 0, "rule mode skips LLM classifier")
+        try suite.equal(store3.floatingWalletIntent?.action, WalletIntentAction.transfer, "rule mode still produces intent via parser")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {
