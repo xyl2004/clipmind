@@ -3,11 +3,11 @@
 跟踪用。代码细节在 [`docs/superpowers/plans/2026-06-05-llm-structured-intent.md`](./docs/superpowers/plans/2026-06-05-llm-structured-intent.md) 对应 Task。
 
 ## Task 1 — `StructuredIntent` 类型与 8 个 action
-- [ ] 写测试 `testStructuredIntentTypes`(构造 + allCases)
-- [ ] 跑 `./script/test.sh`,确认编译失败
-- [ ] 创建 `Sources/AgentWallet/Models/StructuredIntent.swift`(enum + struct + `empty()`)
-- [ ] 跑 `./script/test.sh`,确认 PASS
-- [ ] commit
+- [x] 写测试 `testStructuredIntentTypes`(构造 + allCases)
+- [x] 跑 `./script/test.sh`,确认编译失败
+- [x] 创建 `Sources/AgentWallet/Models/StructuredIntent.swift`(enum + struct + `empty()`)
+- [x] 跑 `./script/test.sh`,确认 PASS
+- [x] commit
 
 ## Task 2 — JSON 严格解析
 - [ ] 追加 3 条 fixture 测试(transfer / swap / check_tx)

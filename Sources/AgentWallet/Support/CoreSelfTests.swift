@@ -7,6 +7,7 @@ enum CoreSelfTests {
     static func run() async throws -> String {
         var suite = CoreSelfTestSuite()
         try testWalletIntentParser(&suite)
+        try testStructuredIntentTypes(&suite)
         try testTransferPlanBuilder(&suite)
         try testTransactionSafety(&suite)
         try testTradeIntentDraft(&suite)
@@ -86,6 +87,34 @@ enum CoreSelfTests {
         )
         try suite.equal(ask.action, WalletIntentAction.ask, "plain question stays ask")
         try suite.check(!ask.requiresConfirmation, "ask intent does not require confirmation")
+    }
+
+    private static func testStructuredIntentTypes(_ suite: inout CoreSelfTestSuite) throws {
+        let transfer = StructuredIntent(
+            action: .transfer,
+            chain: "base",
+            targetAddress: "0x2222222222222222222222222222222222222222",
+            targetQuery: "",
+            transactionHash: "",
+            spendAssetSymbol: "USDC",
+            spendAmount: "5",
+            slippagePercent: nil,
+            unsupportedReason: ""
+        )
+        try suite.equal(transfer.action, StructuredIntentAction.transfer, "structured intent transfer action")
+        try suite.equal(transfer.chain, "base", "structured intent chain id")
+
+        let ask = StructuredIntent.empty(action: .ask)
+        try suite.equal(ask.action, StructuredIntentAction.ask, "structured intent ask via empty()")
+        try suite.equal(ask.chain, nil, "structured intent ask has nil chain")
+        try suite.equal(ask.targetAddress, "", "structured intent ask empty target_address")
+
+        let allCases = StructuredIntentAction.allCases.map(\.rawValue).sorted()
+        try suite.equal(
+            allCases,
+            ["ask", "check_address", "check_balance", "check_token", "check_tx", "swap", "transfer", "unsupported"].sorted(),
+            "structured intent action vocabulary is exactly 8 values"
+        )
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {
