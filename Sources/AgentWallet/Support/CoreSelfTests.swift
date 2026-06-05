@@ -115,6 +115,31 @@ enum CoreSelfTests {
             ["ask", "check_address", "check_balance", "check_token", "check_tx", "swap", "transfer", "unsupported"].sorted(),
             "structured intent action vocabulary is exactly 8 values"
         )
+
+        let validTransferJSON = """
+        {"action":"transfer","chain":"base","target_address":"0x2222222222222222222222222222222222222222","target_query":"","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":null,"unsupported_reason":""}
+        """
+        let decodedTransfer = try StructuredIntent.decode(raw: validTransferJSON)
+        try suite.equal(decodedTransfer.action, StructuredIntentAction.transfer, "decode transfer action")
+        try suite.equal(decodedTransfer.targetAddress, "0x2222222222222222222222222222222222222222", "decode transfer target_address")
+        try suite.equal(decodedTransfer.spendAmount, "5", "decode transfer spend_amount")
+        try suite.equal(decodedTransfer.slippagePercent, nil, "decode transfer null slippage")
+
+        let validSwapJSON = """
+        {"action":"swap","chain":null,"target_address":"","target_query":"doge","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"5","slippage_percent":1.0,"unsupported_reason":""}
+        """
+        let decodedSwap = try StructuredIntent.decode(raw: validSwapJSON)
+        try suite.equal(decodedSwap.action, StructuredIntentAction.swap, "decode swap action")
+        try suite.equal(decodedSwap.chain, nil, "decode swap null chain")
+        try suite.equal(decodedSwap.targetQuery, "doge", "decode swap target_query")
+        try suite.equal(decodedSwap.slippagePercent, 1.0, "decode swap slippage 1.0")
+
+        let validCheckTxJSON = """
+        {"action":"check_tx","chain":"ethereum","target_address":"","target_query":"","transaction_hash":"0xabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabcabca","spend_asset_symbol":"","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+        """
+        let decodedCheckTx = try StructuredIntent.decode(raw: validCheckTxJSON)
+        try suite.equal(decodedCheckTx.action, StructuredIntentAction.checkTx, "decode check_tx action")
+        try suite.equal(decodedCheckTx.transactionHash.count, 66, "decode check_tx hash length")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {

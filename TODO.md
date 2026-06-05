@@ -10,11 +10,11 @@
 - [x] commit
 
 ## Task 2 — JSON 严格解析
-- [ ] 追加 3 条 fixture 测试(transfer / swap / check_tx)
-- [ ] 跑 `./script/test.sh`,失败于 `no member 'decode'`
-- [ ] 实现 `StructuredIntent.decode(raw:)` + `StructuredIntentDecodeError`
-- [ ] 跑 `./script/test.sh`,PASS
-- [ ] commit
+- [x] 追加 3 条 fixture 测试(transfer / swap / check_tx)
+- [x] 跑 `./script/test.sh`,失败于 `no member 'decode'`
+- [x] 实现 `StructuredIntent.decode(raw:)` + `StructuredIntentDecodeError`
+- [x] 跑 `./script/test.sh`,PASS
+- [x] commit
 
 ## Task 3 — JSON 容错(strip markdown / 末尾文字)
 - [ ] 加 2 条容错 fixture
