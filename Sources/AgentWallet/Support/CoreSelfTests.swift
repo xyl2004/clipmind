@@ -10,6 +10,7 @@ enum CoreSelfTests {
         try testStructuredIntentTypes(&suite)
         try testStructuredIntentAdapter(&suite)
         try await testIntentClassifierStub(&suite)
+        try testIntentClassifierPrompt(&suite)
         try testTransferPlanBuilder(&suite)
         try testTransactionSafety(&suite)
         try testTradeIntentDraft(&suite)
@@ -326,6 +327,47 @@ enum CoreSelfTests {
         }
         try suite.check(thrown is IntentClassifierError, "classifier throws IntentClassifierError after retry exhausted")
         try suite.equal(alwaysBad.callCount, 2, "classifier stops at one retry (two calls total)")
+    }
+
+    private static func testIntentClassifierPrompt(_ suite: inout CoreSelfTestSuite) throws {
+        let prompt = IntentClassifierPrompt()
+        try suite.check(prompt.systemPrompt.contains("check_balance"), "system prompt lists check_balance")
+        try suite.check(prompt.systemPrompt.contains("check_address"), "system prompt lists check_address")
+        try suite.check(prompt.systemPrompt.contains("unichain"), "system prompt lists unichain")
+        try suite.check(prompt.systemPrompt.contains("ethereum"), "system prompt lists ethereum")
+
+        let firstTurn = prompt.buildUserPayload(
+            selectedContext: "doge",
+            previousIntent: nil,
+            chainHint: "base",
+            question: "我想买 5u 这个代币"
+        )
+        try suite.check(firstTurn.contains("[selected_context]"), "user payload includes selected_context block")
+        try suite.check(firstTurn.contains("[user_question]"), "user payload includes user_question block")
+        try suite.check(!firstTurn.contains("[previous_intent]"), "first turn omits previous_intent block entirely")
+
+        let priorDraft = WalletIntentParser.parse(
+            selectedText: "doge",
+            question: "我想买这个币",
+            chain: ChainRegistry.base
+        )
+        let secondTurn = prompt.buildUserPayload(
+            selectedContext: "doge",
+            previousIntent: priorDraft,
+            chainHint: "base",
+            question: "5u"
+        )
+        try suite.check(secondTurn.contains("[previous_intent]"), "continuation turn includes previous_intent block")
+        try suite.check(secondTurn.contains("\"action\":\"swap\""), "previous_intent block serializes prior action")
+
+        let longContext = String(repeating: "中", count: 2000)
+        let truncated = prompt.buildUserPayload(
+            selectedContext: longContext,
+            previousIntent: nil,
+            chainHint: "base",
+            question: "?"
+        )
+        try suite.check(truncated.count < longContext.count, "user payload truncates oversized selected context")
     }
 
     private static func testTransferPlanBuilder(_ suite: inout CoreSelfTestSuite) throws {

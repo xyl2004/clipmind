@@ -97,16 +97,3 @@ final class StubIntentClassifierBackend: IntentClassifierBackend {
     }
 }
 
-// Placeholder so this task compiles. Full content lands in Task 9.
-struct IntentClassifierPrompt {
-    var systemPrompt: String { "" }
-
-    func buildUserPayload(
-        selectedContext: String,
-        previousIntent: WalletIntentDraft?,
-        chainHint: String,
-        question: String
-    ) -> String {
-        return ""
-    }
-}
