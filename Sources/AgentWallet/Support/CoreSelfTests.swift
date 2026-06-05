@@ -8,6 +8,7 @@ enum CoreSelfTests {
         var suite = CoreSelfTestSuite()
         try testWalletIntentParser(&suite)
         try testStructuredIntentTypes(&suite)
+        try testStructuredIntentAdapter(&suite)
         try testTransferPlanBuilder(&suite)
         try testTransactionSafety(&suite)
         try testTradeIntentDraft(&suite)
@@ -185,6 +186,88 @@ enum CoreSelfTests {
 
         try suite.expectThrows("decode rejects truly broken JSON") {
             _ = try StructuredIntent.decode(raw: "not json at all")
+        }
+    }
+
+    private static func testStructuredIntentAdapter(_ suite: inout CoreSelfTestSuite) throws {
+        let transferIntent = StructuredIntent(
+            action: .transfer,
+            chain: "base",
+            targetAddress: "0x2222222222222222222222222222222222222222",
+            targetQuery: "",
+            transactionHash: "",
+            spendAssetSymbol: "USDC",
+            spendAmount: "5",
+            slippagePercent: nil,
+            unsupportedReason: ""
+        )
+        let transferDraft = transferIntent.toWalletIntentDraft(
+            selectedContext: "0x2222222222222222222222222222222222222222",
+            fallbackChain: ChainRegistry.ethereum
+        )
+        try suite.equal(transferDraft?.action, WalletIntentAction.transfer, "adapter transfer action")
+        try suite.equal(
+            transferDraft?.recipientAddress,
+            "0x2222222222222222222222222222222222222222",
+            "adapter transfer recipient"
+        )
+        try suite.equal(transferDraft?.spendAmount, "5", "adapter transfer amount")
+        try suite.equal(transferDraft?.spendAsset.symbol, "USDC", "adapter transfer asset")
+        try suite.equal(transferDraft?.chain.id, "base", "adapter transfer chain follows intent")
+        try suite.check(transferDraft?.isComplete == true, "adapter transfer complete")
+
+        let swapIntent = StructuredIntent(
+            action: .swap,
+            chain: nil,
+            targetAddress: "",
+            targetQuery: "doge",
+            transactionHash: "",
+            spendAssetSymbol: "USDC",
+            spendAmount: "5",
+            slippagePercent: 1.0,
+            unsupportedReason: ""
+        )
+        let swapDraft = swapIntent.toWalletIntentDraft(selectedContext: "doge", fallbackChain: ChainRegistry.base)
+        try suite.equal(swapDraft?.action, WalletIntentAction.swap, "adapter swap action")
+        try suite.equal(swapDraft?.targetQuery, "doge", "adapter swap target_query")
+        try suite.equal(swapDraft?.targetAddress, "", "adapter swap no premature address")
+        try suite.equal(swapDraft?.chain.id, "base", "adapter swap chain falls back when null")
+        try suite.equal(swapDraft?.slippage, 1.0, "adapter swap slippage explicit")
+
+        let swapMissingAmount = StructuredIntent(
+            action: .swap,
+            chain: "base",
+            targetAddress: "",
+            targetQuery: "doge",
+            transactionHash: "",
+            spendAssetSymbol: "USDC",
+            spendAmount: "",
+            slippagePercent: nil,
+            unsupportedReason: ""
+        )
+        let missingDraft = swapMissingAmount.toWalletIntentDraft(selectedContext: "doge", fallbackChain: ChainRegistry.base)
+        try suite.check(missingDraft?.missingFields.contains("支付金额") == true, "adapter recomputes missing amount")
+
+        let ask = StructuredIntent.empty(action: .ask)
+        try suite.equal(
+            ask.toWalletIntentDraft(selectedContext: "Uniswap", fallbackChain: ChainRegistry.base) == nil,
+            true,
+            "adapter returns nil for ask"
+        )
+
+        for action in [
+            StructuredIntentAction.checkBalance,
+            .checkToken,
+            .checkTx,
+            .checkAddress,
+            .unsupported
+        ] {
+            try suite.equal(
+                StructuredIntent.empty(action: action)
+                    .toWalletIntentDraft(selectedContext: "", fallbackChain: ChainRegistry.base) == nil,
+                true,
+                "adapter returns nil for \(action.rawValue)"
+            )
         }
     }
 

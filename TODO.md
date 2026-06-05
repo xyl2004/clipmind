@@ -29,11 +29,11 @@
 - [x] commit
 
 ## Task 5 — 适配器 `toWalletIntentDraft`
-- [ ] 新增 `testStructuredIntentAdapter`(transfer / swap / missing_fields / ask/check_*/unsupported 返 nil)
-- [ ] 跑测试,失败于 `no member 'toWalletIntentDraft'`
-- [ ] 实现适配器 + `resolveSpendAsset` 私有助手
-- [ ] 跑测试,PASS
-- [ ] commit
+- [x] 新增 `testStructuredIntentAdapter`(transfer / swap / missing_fields / ask/check_*/unsupported 返 nil)
+- [x] 跑测试,失败于 `no member 'toWalletIntentDraft'`
+- [x] 实现适配器 + `resolveSpendAsset` 私有助手
+- [x] 跑测试,PASS
+- [x] commit
 
 ## Task 6 — `IntentClassifier` + `IntentClassifierBackend` + Stub
 - [ ] 新增 `testIntentClassifierStub`(快乐路径)

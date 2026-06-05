@@ -235,3 +235,112 @@ extension StructuredIntent {
         return number.doubleValue
     }
 }
+
+extension StructuredIntent {
+    func toWalletIntentDraft(
+        selectedContext: String,
+        fallbackChain: ChainProfile
+    ) -> WalletIntentDraft? {
+        switch action {
+        case .transfer:
+            let resolvedChain = ChainRegistry.profile(for: chain ?? "") ?? fallbackChain
+            let asset = resolveSpendAsset(chain: resolvedChain, defaultForSwap: false)
+            var missingFields: [String] = []
+            if targetAddress.isEmpty {
+                missingFields.append("收款地址")
+            }
+            if spendAmount.isEmpty {
+                missingFields.append("转账金额")
+            }
+            if asset == nil {
+                missingFields.append("转账资产")
+            }
+
+            let resolvedAsset = asset ?? resolvedChain.defaultSpendToken
+            return WalletIntentDraft(
+                action: .transfer,
+                selectedContext: selectedContext,
+                targetAddress: targetAddress,
+                targetQuery: "",
+                chain: resolvedChain,
+                spendAsset: resolvedAsset,
+                spendAmount: spendAmount,
+                recipientAddress: targetAddress,
+                slippage: 0,
+                missingFields: missingFields,
+                riskNotes: [
+                    "AI 只生成计划，不会签名或广播。",
+                    "请确认收款地址不可撤销。",
+                    "签名前需要输入收款地址后 4 位。"
+                ],
+                confirmationSummary: "准备在 \(resolvedChain.displayName) 向 \(targetAddress.isEmpty ? "待补充地址" : JSONPrettyPrinter.shortAddress(targetAddress)) 转账 \(spendAmount.isEmpty ? "待补充" : spendAmount) \(resolvedAsset.symbol)。"
+            )
+
+        case .swap:
+            let resolvedChain = ChainRegistry.profile(for: chain ?? "") ?? fallbackChain
+            let asset = resolveSpendAsset(chain: resolvedChain, defaultForSwap: true)
+            var missingFields: [String] = []
+            if targetAddress.isEmpty && targetQuery.isEmpty {
+                missingFields.append("目标代币地址或名称")
+            }
+            if spendAmount.isEmpty {
+                missingFields.append("支付金额")
+            }
+            if asset == nil {
+                missingFields.append("支付资产")
+            }
+
+            let resolvedAsset = asset ?? resolvedChain.defaultSpendToken
+            let displayTarget: String
+            if !targetAddress.isEmpty {
+                displayTarget = JSONPrettyPrinter.shortAddress(targetAddress)
+            } else if !targetQuery.isEmpty {
+                displayTarget = "\(targetQuery)（待确认合约）"
+            } else {
+                displayTarget = "待补充代币"
+            }
+
+            return WalletIntentDraft(
+                action: .swap,
+                selectedContext: selectedContext,
+                targetAddress: targetAddress,
+                targetQuery: targetQuery,
+                chain: resolvedChain,
+                spendAsset: resolvedAsset,
+                spendAmount: spendAmount,
+                recipientAddress: "",
+                slippage: slippagePercent ?? 1.0,
+                missingFields: missingFields,
+                riskNotes: [
+                    "AI 只生成计划，不会签名或广播。",
+                    "Uniswap 报价过期后必须重新生成。",
+                    "签名前需要核对目标代币合约和支付金额。"
+                ],
+                confirmationSummary: "准备在 \(resolvedChain.displayName) 用 \(spendAmount.isEmpty ? "待补充" : spendAmount) \(resolvedAsset.symbol) 购买 \(displayTarget)。"
+            )
+
+        case .ask, .unsupported, .checkBalance, .checkToken, .checkTx, .checkAddress:
+            return nil
+        }
+    }
+
+    private func resolveSpendAsset(chain: ChainProfile, defaultForSwap: Bool) -> TokenProfile? {
+        let normalizedSymbol = spendAssetSymbol.uppercased()
+        if normalizedSymbol == "ETH" {
+            return .nativeETH
+        }
+
+        if normalizedSymbol == "USDC" {
+            guard chain.defaultSpendToken.symbol.uppercased() == "USDC" else {
+                return nil
+            }
+            return chain.defaultSpendToken
+        }
+
+        if normalizedSymbol.isEmpty {
+            return defaultForSwap ? chain.defaultSpendToken : nil
+        }
+
+        return nil
+    }
+}
