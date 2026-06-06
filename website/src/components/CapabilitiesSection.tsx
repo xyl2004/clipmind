@@ -4,6 +4,7 @@ import Image from "next/image"
 import { motion } from "framer-motion"
 import { GlassCard } from "@/components/ui/GlassCard"
 import { TagPill } from "@/components/ui/TagPill"
+import { Zoomable } from "@/components/ui/Zoomable"
 import { fadeUp, inViewProps, staggerContainer } from "@/lib/motion-variants"
 
 interface Capability {
@@ -26,10 +27,12 @@ const CAPABILITIES: Capability[] = [
   {
     title: "代币交易",
     body: "Uniswap 报价 + 候选甄别 + 滑点 / Gas 风险检查",
+    image: "/screenshots/module-swap.png",
   },
   {
     title: "转账",
     body: "自然语言 → 结构化转账单 → 本机签名 → 链上证据",
+    image: "/screenshots/module-transfer.png",
   },
 ]
 
@@ -37,21 +40,23 @@ function CapabilityCard({ capability }: { capability: Capability }) {
   return (
     <motion.div variants={fadeUp} className="h-full">
       <GlassCard className="flex h-full flex-col gap-4 p-6">
-        <div className="aspect-[4/3] overflow-hidden rounded-lg border border-surface-border bg-surface-raised">
-          {capability.image ? (
-            <Image
-              src={capability.image}
-              alt=""
-              width={1600}
-              height={1200}
-              className="block h-full w-full object-cover"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-xs text-ink-subtle">
-              Coming soon
+        {capability.image ? (
+          <Zoomable label={`放大查看:${capability.title}`}>
+            <div className="aspect-[4/3] overflow-hidden rounded-lg border border-surface-border bg-surface-raised">
+              <Image
+                src={capability.image}
+                alt={capability.title}
+                width={1600}
+                height={1200}
+                className="block h-full w-full object-cover"
+              />
             </div>
-          )}
-        </div>
+          </Zoomable>
+        ) : (
+          <div className="flex aspect-[4/3] items-center justify-center overflow-hidden rounded-lg border border-surface-border bg-surface-raised text-xs text-ink-subtle">
+            Coming soon
+          </div>
+        )}
         <h3 className="text-xl font-medium">{capability.title}</h3>
         <p className="text-sm leading-relaxed text-ink-muted">{capability.body}</p>
       </GlassCard>

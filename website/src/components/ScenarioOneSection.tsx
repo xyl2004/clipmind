@@ -4,6 +4,7 @@ import Image from "next/image"
 import { motion } from "framer-motion"
 import { BrowserChrome } from "@/components/ui/BrowserChrome"
 import { TagPill } from "@/components/ui/TagPill"
+import { Zoomable } from "@/components/ui/Zoomable"
 import {
   fadeUp,
   inViewProps,
@@ -22,16 +23,18 @@ export function ScenarioOneSection() {
     <section id="scenarios" className="relative bg-surface-base px-6 py-20 md:py-32">
       <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-[1.2fr_1fr]">
         <motion.div {...inViewProps} variants={slideInLeft}>
-          <BrowserChrome label="X (Twitter) · Virtuals Protocol">
-            <Image
-              src="/screenshots/scenario1-overlay.png"
-              alt="ClipMind 悬浮窗叠在 X 上,实时调研 Virtuals Protocol"
-              width={2400}
-              height={1500}
-              className="block h-auto w-full"
-              priority
-            />
-          </BrowserChrome>
+          <Zoomable label="放大查看:悬浮窗叠在 X 上调研 Virtuals">
+            <BrowserChrome label="X (Twitter) · Virtuals Protocol">
+              <Image
+                src="/screenshots/scenario1-overlay.png"
+                alt="ClipMind 悬浮窗叠在 X 上,实时调研 Virtuals Protocol"
+                width={2400}
+                height={1500}
+                className="block h-auto w-full"
+                priority
+              />
+            </BrowserChrome>
+          </Zoomable>
         </motion.div>
 
         <motion.div

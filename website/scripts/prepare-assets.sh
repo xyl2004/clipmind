@@ -49,11 +49,15 @@ SHOTS=(
   "截屏2026-06-06 14.31.09.png:hero-main-window.png"
   "截屏2026-06-06 14.29.52.png:scenario1-overlay.png"
   "截屏2026-06-06 10.52.08.png:scenario1-alt.png"
-  "截屏2026-06-06 11.30.04.png:scenario1-zec-detail.png"
-  "截屏2026-06-06 10.52.12.png:scenario2-intent.png"
   "截屏2026-06-06 14.31.35.png:module-research.png"
   "截屏2026-06-06 14.30.47.png:module-risk.png"
   "截屏2026-06-06 14.30.36.png:module-floating.png"
+  "截屏2026-06-06 14.30.47.png:scenario2-step1-chat.png"
+  "截屏2026-06-06 11.30.04.png:scenario2-step1-explain.png"
+  "截屏2026-06-06 20.37.31.png:scenario2-step2-candidates.png"
+  "截屏2026-06-06 20.38.45.png:scenario2-step3-confirm.png"
+  "截屏2026-06-06 15.35.28.png:module-swap.png"
+  "截屏2026-06-06 20.49.27.png:module-transfer.png"
 )
 
 echo "=== Compressing screenshots ==="

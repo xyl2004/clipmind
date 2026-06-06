@@ -5,6 +5,7 @@ import { useEffect, useState } from "react"
 import { BrowserChrome } from "@/components/ui/BrowserChrome"
 import { GradientText } from "@/components/ui/GradientText"
 import { TagPill } from "@/components/ui/TagPill"
+import { Zoomable } from "@/components/ui/Zoomable"
 import { fadeUp, inViewProps, staggerContainer } from "@/lib/motion-variants"
 
 export function HeroSection() {
@@ -102,17 +103,32 @@ export function HeroSection() {
           style={{ rotateX, rotateY, transformPerspective: 1200 }}
           className="relative"
         >
-          <BrowserChrome label="ClipMind · Live demo">
-            <video
-              src="/hero-demo.mp4"
-              poster="/hero-demo-poster.jpg"
-              autoPlay
-              muted
-              loop
-              playsInline
-              className="block w-full"
-            />
-          </BrowserChrome>
+          <Zoomable
+            label="放大查看演示视频"
+            expandedContent={
+              <video
+                src="/hero-demo.mp4"
+                poster="/hero-demo-poster.jpg"
+                autoPlay
+                loop
+                playsInline
+                controls
+                className="block max-h-[90vh] max-w-[90vw] rounded-lg"
+              />
+            }
+          >
+            <BrowserChrome label="ClipMind · Live demo">
+              <video
+                src="/hero-demo.mp4"
+                poster="/hero-demo-poster.jpg"
+                autoPlay
+                muted
+                loop
+                playsInline
+                className="block w-full"
+              />
+            </BrowserChrome>
+          </Zoomable>
         </motion.div>
       </div>
     </section>
