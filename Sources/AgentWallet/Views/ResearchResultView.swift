@@ -21,15 +21,6 @@ struct ResearchResultView: View {
                 onRefresh: onRefreshExplanation
             )
 
-            ForEach(snapshot.warnings, id: \.self) { warning in
-                StatusBanner(
-                    title: "部分数据",
-                    message: warning,
-                    systemImage: "exclamationmark.triangle",
-                    tint: .orange
-                )
-            }
-
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 320), spacing: 16)], alignment: .leading, spacing: 16) {
                 ForEach(snapshot.sections) { section in
                     ResultSectionCard(section: section)

@@ -306,8 +306,7 @@ struct FloatingContextPanelView: View {
         let sectionEstimate = CGFloat(snapshot.sections.count) * 58
         let rowEstimate = CGFloat(rowCount) * 30
         let commandEstimate = CGFloat(snapshot.commands.count) * 24
-        let warningEstimate = CGFloat(snapshot.warnings.count) * 38
-        return min(max(246 + sectionEstimate + rowEstimate + commandEstimate + warningEstimate, 260), 820)
+        return min(max(246 + sectionEstimate + rowEstimate + commandEstimate, 260), 820)
     }
 
     private func reportSize() {
@@ -367,24 +366,6 @@ private struct FloatingResearchSummary: View {
             Text(snapshot.subtitle)
                 .font(.caption)
                 .foregroundStyle(AppTheme.mutedText)
-
-            if !snapshot.warnings.isEmpty {
-                VStack(alignment: .leading, spacing: 6) {
-                    ForEach(snapshot.warnings, id: \.self) { warning in
-                        Label(warning, systemImage: "exclamationmark.triangle")
-                            .font(.caption)
-                            .foregroundStyle(.orange)
-                            .fixedSize(horizontal: false, vertical: true)
-                            .textSelection(.enabled)
-                    }
-                }
-                .padding(10)
-                .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 10, style: .continuous)
-                        .stroke(AppTheme.border, lineWidth: 1)
-                )
-            }
 
             VStack(alignment: .leading, spacing: 10) {
                 ForEach(snapshot.sections) { section in

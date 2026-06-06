@@ -41,6 +41,11 @@ struct IntentClassifierPrompt {
     chain 必须是下列之一或 null：
     ethereum / base / arbitrum / optimism / polygon / unichain
 
+    [chain_hint] 解释：
+    - 如果 chain_hint 是上面六链之一，表示用户已显式选定，输出 chain 优先用该值。
+    - 如果 chain_hint 是 "auto"，表示用户没有指定链，请根据 target_address 的实际部署链推断 chain（例如 0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48 是 Ethereum 主网的 USDC，chain 应该是 ethereum；0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913 是 Base USDC，chain 应该是 base）。不要把 chain_hint 的 "auto" 写进输出。
+    - 如果完全无法判断链，chain 填 null。
+
     字段规则：
     - target_address：0x + 40 位十六进制；否则填 ""
     - transaction_hash：0x + 64 位十六进制；否则填 ""

@@ -978,10 +978,11 @@ final class AppStore: ObservableObject {
 
         if !intentBackendMode.skipsLLM {
             do {
+                let chainHint = selectedChainFilter.profile?.id ?? "auto"
                 let structured = try await intentClassifier.classify(
                     selectedContext: context,
                     previousIntent: previousIntent,
-                    chainHint: chain.id,
+                    chainHint: chainHint,
                     question: question
                 )
                 if let handled = await dispatchStructuredIntent(
@@ -1130,6 +1131,10 @@ final class AppStore: ObservableObject {
         chainID: String?,
         sessionID: ContextChatSession.ID?
     ) async {
+        // Snapshot the conversation history BEFORE we append our own placeholder,
+        // so the LLM sees the user's real question without our scaffolding noise.
+        let historyForLLM = chatMessages
+
         appendMessage(
             ContextChatMessage(
                 role: .assistant,
@@ -1162,10 +1167,34 @@ final class AppStore: ObservableObject {
             contextDetailSnapshot = snapshot
             syncActiveSessionSnapshot(snapshot)
             isLoading = false
-            await runLLMExplanation()
+
+            do {
+                let answer = try await llmClient.answerAboutContext(
+                    selectedText: trimmed,
+                    surfSnapshot: snapshot,
+                    history: historyForLLM
+                )
+                appendMessage(
+                    ContextChatMessage(role: .assistant, text: answer),
+                    to: sessionID
+                )
+            } catch {
+                llmErrorMessage = error.localizedDescription
+                appendMessage(
+                    ContextChatMessage(
+                        role: .assistant,
+                        text: "Surf 数据已就绪，AI 回答失败：\(error.localizedDescription)。完整证据已在上方展开。"
+                    ),
+                    to: sessionID
+                )
+            }
         } catch {
             errorMessage = error.localizedDescription
             isLoading = false
+            appendMessage(
+                ContextChatMessage(role: .assistant, text: "Surf 查询失败：\(error.localizedDescription)"),
+                to: sessionID
+            )
         }
     }
 
