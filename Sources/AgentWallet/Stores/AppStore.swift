@@ -834,6 +834,7 @@ final class AppStore: ObservableObject {
             return
         }
 
+        let recordSessionID = activeChatSessionID
         isSigningTransfer = true
         floatingWalletActionStatusMessage = "正在本机签名并广播转账。"
         floatingWalletActionErrorMessage = nil
@@ -846,9 +847,27 @@ final class AppStore: ObservableObject {
             let explorerPrefix = transferPlan.chain.explorerTransactionURLPrefix
             floatingWalletActionStatusMessage = "转账已广播：\(hash)\n\(explorerPrefix)/\(hash)"
             addTradeHistory(hash: hash, chain: transferPlan.chain, action: "转账")
+            appendMessage(
+                ContextChatMessage(
+                    role: .assistant,
+                    text: BroadcastChatFormatter.formatSuccess(
+                        action: .transfer,
+                        hash: hash,
+                        chain: transferPlan.chain
+                    )
+                ),
+                to: recordSessionID
+            )
             self.transferPlan = nil
             transferConfirmationText = ""
         } catch {
+            appendMessage(
+                ContextChatMessage(
+                    role: .assistant,
+                    text: BroadcastChatFormatter.formatFailure(action: .transfer, error: error)
+                ),
+                to: recordSessionID
+            )
             floatingWalletActionErrorMessage = error.localizedDescription
             floatingWalletActionStatusMessage = nil
         }
