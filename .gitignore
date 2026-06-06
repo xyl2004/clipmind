@@ -5,3 +5,10 @@ dist/
 DerivedData/
 .env
 .env.*
+
+# Website (Next.js)
+website/node_modules
+website/.next
+website/.vercel
+website/out
+website/.env*.local
