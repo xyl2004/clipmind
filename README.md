@@ -1,86 +1,117 @@
 # ClipMind
 
-ClipMind is a macOS AI wallet for selected Web3 text.
+**Highlight Web3 text. Ask AI. Sign locally.**
 
-Select an address, token contract, transaction hash, project name, or any Web3 snippet anywhere on macOS. Press `Control + Option + W`, ask a question, and ClipMind turns that selection into grounded AI context, on-chain research, or a user-confirmed wallet action.
+ClipMind is a macOS AI wallet layer for the moment when a user sees something on-chain and does not yet know what it means or what to do next.
 
-The product idea is simple: **highlight first, ask naturally, sign locally**.
+Select a wallet address, token contract, transaction hash, project name, or Web3 paragraph anywhere on macOS. Press `Control + Option + W`. ClipMind opens a floating AI panel that can explain the selection, fetch on-chain evidence, classify the user's intent, and prepare a locally signed EVM wallet action.
 
-## What It Does
+## The Problem
 
-- Opens a floating AI context panel from selected text with `Control + Option + W`.
-- Keeps one chat thread per selection, so every address, token, tx, or project has its own context.
-- Uses Surf CLI to fetch EVM wallet, token, transaction, and project data.
-- Uses B.AI / DeepSeek to explain selected Web3 context in Chinese.
-- Classifies wallet intents from natural language, including ask, transfer, swap, and read-only checks.
-- Builds user-confirmed Uniswap swap plans for Ethereum, Base, Arbitrum, OP Mainnet, and Polygon.
-- Creates or imports a local EVM wallet, stores the private key in macOS Keychain, and signs only after explicit user confirmation.
-- Provides a core self-test suite for intent parsing, transaction validation, chain config, wallet assets, and local wallet export checks.
+Web3 users constantly move between chats, explorers, docs, token pages, and trading tools. The hard part is not only signing a transaction. It is understanding the context before signing:
 
-## Product Shape
+- What is this address?
+- Is this token contract the right one?
+- What happened in this transaction?
+- Can I send funds here?
+- Can I buy this token safely?
 
-ClipMind has two surfaces:
+Most wallets wait for a dApp transaction request. ClipMind starts earlier: at the selected text.
 
-- **Floating panel**: the high-frequency entry point for selected text, AI questions, and wallet intents.
-- **Main window**: the deeper workspace for wallet state, service connections, transaction history, conversation history, full Surf evidence, and advanced management.
+## The Solution
 
-The wallet flow is designed around a strict boundary:
+ClipMind turns selected Web3 text into an AI-guided wallet workflow:
 
 ```text
-AI understands intent
--> ClipMind builds a readable plan
--> ClipMind checks parameters, balance, gas, quote freshness, and risk notes
--> the user reviews a confirmation sheet
--> the local wallet signs
+Select Web3 text
+-> Open ClipMind with Control + Option + W
+-> Ask a natural-language question or command
+-> Fetch Surf-backed on-chain context when useful
+-> Classify intent: ask, check, transfer, or swap
+-> Build a readable transaction plan
+-> Validate chain, balance, gas, quote freshness, and risk notes
+-> User confirms
+-> Local wallet signs
 ```
 
-AI does not read private keys, call signing functions directly, or broadcast transactions without user confirmation.
+AI helps understand and prepare. The local wallet signs only after explicit confirmation.
 
-## Current Capabilities
+## Demo Flow
 
-### Selected-Text AI
+### 1. Ask About Selected Text
 
-ClipMind can read selected text from other macOS apps with Accessibility permission. If direct selection reading is unavailable, it falls back to a clipboard-based read and restores the previous clipboard content.
+Select a wallet address, token contract, transaction hash, project name, or paragraph, then ask:
 
-Supported context types include:
+```text
+这个地址安全吗？
+这个交易发生了什么？
+这个项目是做什么的？
+```
 
-- EVM wallet addresses
-- Token contracts
-- Transaction hashes
-- Short project names
-- Free-form Web3 text
+ClipMind can answer with selected-text context plus Surf-backed EVM data.
 
-### On-Chain Research
+### 2. Send To A Selected Address
 
-Surf-powered research currently covers:
-
-- Wallet detail and recent transfers
-- Token holders, DEX trades, and token transfers
-- Transaction details
-- Project overview, token info, contracts, social links, and news
-
-### AI Wallet Actions
-
-ClipMind can parse natural-language wallet requests such as:
+Select a wallet address and ask:
 
 ```text
 给这个地址转 5 USDC
-用 20U 买这个币
-这个地址安全吗？
-查一下这笔交易
 ```
 
-The app uses an LLM-first structured intent classifier with a rule-based fallback. Read-only checks can trigger Surf research or local wallet balance summaries. Transfer and swap intents produce structured plans that must pass validation before signing.
+ClipMind parses the transfer intent, builds a confirmation plan, checks wallet state, and requires local confirmation before signing.
 
-### Local Signing
+### 3. Buy A Selected Token
 
-The local wallet:
+Select a token contract and ask:
 
-- Stores the private key in macOS Keychain.
-- Does not store a seed phrase.
-- Does not send the private key to the LLM.
-- Requires explicit confirmation before signing.
-- Allows explicit private-key export only after a second local confirmation.
+```text
+用 20U 买这个币
+```
+
+ClipMind builds a Uniswap swap plan, shows expected output, gas, quote freshness, approval needs, and safety notes before the user signs.
+
+## Why It Is Different
+
+- **Selection-first UX**: the workflow begins from text the user is already looking at, not from a wallet form.
+- **AI-native intent layer**: natural language is converted into structured wallet actions with a rule-based fallback.
+- **Evidence before execution**: Surf research can ground answers and checks before a transaction is prepared.
+- **Local signing boundary**: private keys stay in macOS Keychain and are never exposed to the LLM.
+- **Floating wallet surface**: the wallet appears near the user's current context instead of forcing a tab or app switch.
+
+## Current Capabilities
+
+- Floating macOS context panel opened with `Control + Option + W`.
+- Per-selection chat sessions and history.
+- EVM research for wallets, tokens, transactions, and projects through Surf CLI.
+- Chinese AI explanations through B.AI / DeepSeek.
+- LLM-first structured intent classification with rule fallback.
+- Read-only checks for balances, addresses, tokens, and transactions.
+- User-confirmed transfer and swap planning.
+- Uniswap swap quotes for Ethereum, Base, Arbitrum, OP Mainnet, and Polygon.
+- Local EVM wallet creation/import with private key storage in macOS Keychain.
+- Local signing only after explicit user confirmation.
+- Core self-test suite for intent parsing, validation, chain config, wallet assets, and local wallet export checks.
+
+## Safety Model
+
+ClipMind treats AI output as a draft, not authority.
+
+- AI cannot read private keys.
+- AI cannot call signing functions directly.
+- AI cannot broadcast a transaction without user confirmation.
+- Transaction plans must pass validation before signing.
+- Expired quotes, invalid addresses, chain mismatches, missing fields, insufficient balance, and gas problems block execution.
+- Private-key export requires a separate local confirmation.
+
+## Tech Stack
+
+- SwiftUI macOS app
+- Swift Package Manager
+- web3swift + secp256k1 local signing
+- macOS Keychain
+- Surf CLI for on-chain research
+- B.AI / DeepSeek for AI explanation and intent classification
+- Uniswap Trading API for swap quotes and transactions
 
 ## Requirements
 
@@ -140,14 +171,6 @@ swift run ClipMind --self-test-core
 
 The self-test path avoids real network calls and uses isolated test Keychain services. It is the active automated test entrypoint in this workspace.
 
-## Daily Use
+## Status
 
-1. Select text anywhere on macOS.
-2. Press `Control + Option + W`.
-3. Ask what the selection means, whether it looks risky, or what action you want to prepare.
-4. Review AI answers and Surf-backed context.
-5. For wallet actions, review the generated confirmation sheet before local signing.
-
-## Safety Notes
-
-ClipMind is experimental software for a local AI-wallet workflow. Review every transaction before signing, keep small limits while testing, and treat all AI-generated plans as drafts until the confirmation sheet and on-chain details make sense.
+ClipMind is an experimental competition build. It demonstrates a selection-first AI wallet workflow where AI helps users understand and prepare actions, while signing remains local and confirmation-gated.
