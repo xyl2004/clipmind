@@ -371,6 +371,26 @@ a {
   padding: 26px 26px 22px;
 }
 
+.intent-points {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.intent-points span {
+  display: inline-flex;
+  min-height: 30px;
+  align-items: center;
+  border: 1px solid #cfe4bf;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #eef7e8;
+  color: var(--green-dark);
+  font-size: 13px;
+  font-weight: 800;
+}
+
 .module-panel > img {
   width: 100%;
   height: clamp(220px, 24vw, 320px);
@@ -381,6 +401,10 @@ a {
 
 .module-large > img {
   height: clamp(260px, 27vw, 380px);
+}
+
+.module-panel > img.intent-workbench-image {
+  object-position: center 42%;
 }
 
 .evidence-grid {
@@ -404,6 +428,43 @@ a {
 
 .value-section {
   background: var(--bg);
+}
+
+.intelligence-section {
+  background: #ffffff;
+  border-top: 1px solid var(--line);
+}
+
+.intelligence-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 1px;
+  border: 1px solid var(--line);
+  background: var(--line);
+}
+
+.intelligence-grid article {
+  min-height: 230px;
+  padding: 26px;
+  background: #fbfcf8;
+}
+
+.intelligence-grid span {
+  color: var(--teal);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.intelligence-grid h3 {
+  margin: 14px 0 0;
+  font-size: 22px;
+  line-height: 1.24;
+  letter-spacing: 0;
+}
+
+.intelligence-grid p {
+  margin: 12px 0 0;
+  color: var(--muted);
 }
 
 .tech-section {
@@ -532,6 +593,7 @@ a {
   .scenario-grid,
   .module-layout,
   .comparison-grid,
+  .intelligence-grid,
   .tech-grid,
   .safety-grid {
     grid-template-columns: 1fr;
