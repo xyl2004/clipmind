@@ -16,6 +16,7 @@ const mono = JetBrains_Mono({
 })
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://clipmind.vercel.app"),
   title: "ClipMind — 在任何页面，唤起你的区块链 AI 助手",
   description:
     "macOS 悬浮窗钱包助手。选中文字 · ⌃⌥W 唤起 · 项目调研 / 代币交易 / 转账 一气呵成。",
