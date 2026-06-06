@@ -12,6 +12,7 @@ enum CoreSelfTests {
         try await testIntentClassifierStub(&suite)
         try testIntentClassifierPrompt(&suite)
         try testBroadcastChatRecordFormat(&suite)
+        try testChatBubbleAttributedString(&suite)
         try await testAppStoreIntentDispatch(&suite)
         try await testAppStoreCheckActions(&suite)
         try await testAppStoreIntentStatePreservation(&suite)
@@ -417,6 +418,28 @@ enum CoreSelfTests {
         )
         try suite.check(approvalFail.contains("广播授权失败"), "approval failure label")
         try suite.check(approvalFail.contains("Gas 余额"), "approval failure hint mentions gas")
+    }
+
+    private static func testChatBubbleAttributedString(_ suite: inout CoreSelfTestSuite) throws {
+        let single = ChatBubbleAttributedString.build("查 https://basescan.org/tx/0xabc 看详情")
+        try suite.equal(String(single.characters), "查 https://basescan.org/tx/0xabc 看详情", "build keeps original text")
+        var foundLink = false
+        for run in single.runs where run.link != nil {
+            foundLink = true
+        }
+        try suite.check(foundLink, "URL detected and link attribute set")
+
+        let none = ChatBubbleAttributedString.build("这段没有链接")
+        for run in none.runs {
+            try suite.check(run.link == nil, "no link in plain text run")
+        }
+
+        let two = ChatBubbleAttributedString.build("https://a.example 和 https://b.example 都看")
+        var linkCount = 0
+        for run in two.runs where run.link != nil {
+            linkCount += 1
+        }
+        try suite.check(linkCount >= 1, "at least one URL detected when multiple present")
     }
 
     @MainActor
