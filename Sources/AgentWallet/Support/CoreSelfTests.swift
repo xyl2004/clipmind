@@ -395,6 +395,28 @@ enum CoreSelfTests {
         let transfer = BroadcastChatFormatter.formatSuccess(action: .transfer, hash: hash, chain: base)
         try suite.check(transfer.contains("Base 上广播转账"), "transfer success header on Base")
         try suite.check(transfer.contains("https://basescan.org/tx/\(hash)"), "transfer success contains explorer URL")
+
+        let swapFail = BroadcastChatFormatter.formatFailure(
+            action: .swap,
+            error: SampleBroadcastError.network
+        )
+        try suite.check(swapFail.contains("广播 Uniswap 兑换失败"), "swap failure label")
+        try suite.check(swapFail.contains("报价新鲜度"), "swap failure hint mentions quote freshness")
+        try suite.check(swapFail.contains("测试用网络错误"), "swap failure quotes underlying error")
+
+        let transferFail = BroadcastChatFormatter.formatFailure(
+            action: .transfer,
+            error: SampleBroadcastError.network
+        )
+        try suite.check(transferFail.contains("广播转账失败"), "transfer failure label")
+        try suite.check(transferFail.contains("收款地址"), "transfer failure hint mentions recipient")
+
+        let approvalFail = BroadcastChatFormatter.formatFailure(
+            action: .swapApproval(spendSymbol: "USDC"),
+            error: SampleBroadcastError.network
+        )
+        try suite.check(approvalFail.contains("广播授权失败"), "approval failure label")
+        try suite.check(approvalFail.contains("Gas 余额"), "approval failure hint mentions gas")
     }
 
     @MainActor
@@ -1032,6 +1054,17 @@ private final class StubTradeProvider: TradeProvider {
 
 private enum StubProviderError: Error {
     case unused
+}
+
+private enum SampleBroadcastError: LocalizedError {
+    case network
+
+    var errorDescription: String? {
+        switch self {
+        case .network:
+            return "测试用网络错误"
+        }
+    }
 }
 
 private struct CoreSelfTestSuite {

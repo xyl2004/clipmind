@@ -30,3 +30,22 @@ enum BroadcastChatFormatter {
         ].joined(separator: "\n")
     }
 }
+
+extension BroadcastChatFormatter {
+    static func formatFailure(action: BroadcastAction, error: Error) -> String {
+        let actionLabel: String
+        let hint: String
+        switch action {
+        case .swapApproval:
+            actionLabel = "广播授权失败"
+            hint = "可以检查 Gas 余额和网络后再试。"
+        case .swap:
+            actionLabel = "广播 Uniswap 兑换失败"
+            hint = "可以检查 Gas 余额、报价新鲜度、网络后再试。"
+        case .transfer:
+            actionLabel = "广播转账失败"
+            hint = "可以检查 Gas 余额、收款地址和网络后再试。"
+        }
+        return "\(actionLabel)：\(error.localizedDescription)。\n\(hint)"
+    }
+}
