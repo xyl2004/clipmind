@@ -748,6 +748,7 @@ final class AppStore: ObservableObject {
             return
         }
 
+        let recordSessionID = activeChatSessionID
         isSigningTrade = true
         tradeStatusMessage = tradePlan.needsApproval ? "正在本机签名授权交易。" : "正在本机签名并广播 swap。"
         tradeErrorMessage = nil
@@ -755,16 +756,40 @@ final class AppStore: ObservableObject {
         do {
             let hash = try await localWalletClient.signAndBroadcast(transaction, chain: tradePlan.chain)
             let explorerPrefix = tradePlan.chain.explorerTransactionURLPrefix
+            let recordAction: BroadcastAction
             if tradePlan.needsApproval {
                 tradeStatusMessage = "授权交易已广播：\(hash)\n\(explorerPrefix)/\(hash)\n授权上链后请重新生成报价，再签名兑换。"
                 addTradeHistory(hash: hash, chain: tradePlan.chain, action: "授权")
+                recordAction = .swapApproval(spendSymbol: tradePlan.inputToken.symbol)
             } else {
                 tradeStatusMessage = "交易已广播：\(hash)\n\(explorerPrefix)/\(hash)"
                 addTradeHistory(hash: hash, chain: tradePlan.chain, action: "兑换")
+                recordAction = .swap
             }
+            appendMessage(
+                ContextChatMessage(
+                    role: .assistant,
+                    text: BroadcastChatFormatter.formatSuccess(
+                        action: recordAction,
+                        hash: hash,
+                        chain: tradePlan.chain
+                    )
+                ),
+                to: recordSessionID
+            )
             self.tradePlan = nil
             tradeConfirmationText = ""
         } catch {
+            let failureAction: BroadcastAction = tradePlan.needsApproval
+                ? .swapApproval(spendSymbol: tradePlan.inputToken.symbol)
+                : .swap
+            appendMessage(
+                ContextChatMessage(
+                    role: .assistant,
+                    text: BroadcastChatFormatter.formatFailure(action: failureAction, error: error)
+                ),
+                to: recordSessionID
+            )
             tradeErrorMessage = error.localizedDescription
             tradeStatusMessage = nil
         }
