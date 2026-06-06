@@ -4,6 +4,8 @@
 
 产品展示页：[https://clipmind-showcase.vercel.app](https://clipmind-showcase.vercel.app)
 
+演示视频：[https://youtu.be/1A4df98W-7g](https://youtu.be/1A4df98W-7g)
+
 ClipMind 是一款 macOS 悬浮窗钱包助手。
 
 选中文字 · `⌃⌥W` 唤起 · 调研、问答、交易一气呵成。
