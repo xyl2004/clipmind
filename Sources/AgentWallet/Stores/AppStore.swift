@@ -1133,7 +1133,7 @@ final class AppStore: ObservableObject {
         appendMessage(
             ContextChatMessage(
                 role: .assistant,
-                text: "正在用 Surf 查 \(query) 的链上信息，完整证据会在主窗口展开。"
+                text: "正在用 Surf 查 \(query) 的链上信息，完整证据会同时显示在悬浮窗和主窗口。"
             ),
             to: sessionID
         )

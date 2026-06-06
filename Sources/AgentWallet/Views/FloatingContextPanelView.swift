@@ -39,6 +39,23 @@ struct FloatingContextPanelView: View {
         ].joined(separator: "|")
     }
 
+    private var panelLayoutToken: String {
+        [
+            "\(store.chatMessages.count)",
+            store.chatQuestion,
+            "\(store.chatSessions.count)",
+            store.activeChatSessionID?.uuidString ?? "",
+            store.isLoadingContextDetails ? "1" : "0",
+            store.contextDetailErrorMessage ?? "",
+            store.currentContextSnapshot?.id.uuidString ?? "",
+            store.aiExplanation ?? "",
+            store.isExplaining ? "1" : "0",
+            store.llmErrorMessage ?? "",
+            store.isAnsweringQuestion ? "1" : "0",
+            walletActionLayoutToken
+        ].joined(separator: "|")
+    }
+
     private var hasScrollableContent: Bool {
         store.isLoadingContextDetails
             || store.contextDetailErrorMessage != nil
@@ -72,15 +89,7 @@ struct FloatingContextPanelView: View {
     var body: some View {
         panelContent
             .onAppear(perform: reportSize)
-            .onChange(of: store.chatMessages.count) { reportSize() }
-            .onChange(of: store.chatQuestion) { reportSize() }
-            .onChange(of: store.chatSessions.count) { reportSize() }
-            .onChange(of: store.activeChatSessionID) { reportSize() }
-            .onChange(of: store.isLoadingContextDetails) { reportSize() }
-            .onChange(of: store.contextDetailErrorMessage) { reportSize() }
-            .onChange(of: store.currentContextSnapshot?.id) { reportSize() }
-            .onChange(of: store.isAnsweringQuestion) { reportSize() }
-            .onChange(of: walletActionLayoutToken) { reportSize() }
+            .onChange(of: panelLayoutToken) { reportSize() }
     }
 
     private var panelContent: some View {
@@ -190,7 +199,7 @@ struct FloatingContextPanelView: View {
                         detailStatus
 
                         if let snapshot = store.currentContextSnapshot {
-                            FloatingResearchSummary(snapshot: snapshot)
+                            FloatingResearchSummary(store: store, snapshot: snapshot)
                         }
 
                         if !store.chatMessages.isEmpty {
@@ -294,9 +303,11 @@ struct FloatingContextPanelView: View {
 
     private func estimatedSnapshotHeight(_ snapshot: ResearchSnapshot) -> CGFloat {
         let rowCount = snapshot.sections.reduce(0) { $0 + $1.rows.count }
-        let sectionEstimate = CGFloat(snapshot.sections.count) * 46
-        let rowEstimate = CGFloat(rowCount) * 22
-        return min(max(64 + sectionEstimate + rowEstimate, 150), 360)
+        let sectionEstimate = CGFloat(snapshot.sections.count) * 58
+        let rowEstimate = CGFloat(rowCount) * 30
+        let commandEstimate = CGFloat(snapshot.commands.count) * 24
+        let warningEstimate = CGFloat(snapshot.warnings.count) * 38
+        return min(max(246 + sectionEstimate + rowEstimate + commandEstimate + warningEstimate, 260), 820)
     }
 
     private func reportSize() {
@@ -332,29 +343,153 @@ private struct FloatingContextPreview: View {
 }
 
 private struct FloatingResearchSummary: View {
+    @ObservedObject var store: AppStore
     let snapshot: ResearchSnapshot
+    @State private var showsDiagnostics = false
+    @State private var showsRawJSON = false
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
+            FloatingAIExplanationCard(store: store)
+
             HStack(alignment: .firstTextBaseline) {
                 Label(snapshot.title, systemImage: snapshot.kind.systemImage)
                     .font(.headline)
                 Spacer()
-                Text(snapshot.subtitle)
+                Text("完整证据")
                     .font(.caption)
-                    .foregroundStyle(AppTheme.mutedText)
+                    .foregroundStyle(AppTheme.accent)
+                    .padding(.horizontal, 8)
+                    .padding(.vertical, 4)
+                    .background(AppTheme.accent.opacity(0.12), in: Capsule())
             }
 
-            LazyVGrid(
-                columns: [GridItem(.adaptive(minimum: 230), spacing: 10)],
-                alignment: .leading,
-                spacing: 10
-            ) {
-                ForEach(snapshot.sections.prefix(5)) { section in
+            Text(snapshot.subtitle)
+                .font(.caption)
+                .foregroundStyle(AppTheme.mutedText)
+
+            if !snapshot.warnings.isEmpty {
+                VStack(alignment: .leading, spacing: 6) {
+                    ForEach(snapshot.warnings, id: \.self) { warning in
+                        Label(warning, systemImage: "exclamationmark.triangle")
+                            .font(.caption)
+                            .foregroundStyle(.orange)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .textSelection(.enabled)
+                    }
+                }
+                .padding(10)
+                .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 10, style: .continuous)
+                        .stroke(AppTheme.border, lineWidth: 1)
+                )
+            }
+
+            VStack(alignment: .leading, spacing: 10) {
+                ForEach(snapshot.sections) { section in
                     FloatingSectionCard(section: section)
                 }
             }
+
+            DisclosureGroup("Surf 命令与原始证据", isExpanded: $showsDiagnostics) {
+                VStack(alignment: .leading, spacing: 10) {
+                    ForEach(snapshot.commands) { command in
+                        HStack(alignment: .firstTextBaseline, spacing: 8) {
+                            Image(systemName: command.succeeded ? "checkmark.circle.fill" : "xmark.circle.fill")
+                                .foregroundStyle(command.succeeded ? AppTheme.accent : .red)
+                            Text(command.command)
+                                .font(.system(.caption, design: .monospaced))
+                                .textSelection(.enabled)
+                            Spacer(minLength: 8)
+                            Text(command.summary)
+                                .font(.caption)
+                                .foregroundStyle(AppTheme.mutedText)
+                                .lineLimit(2)
+                                .textSelection(.enabled)
+                        }
+                    }
+
+                    DisclosureGroup("原始 JSON", isExpanded: $showsRawJSON) {
+                        Text(snapshot.rawJSON)
+                            .font(.system(.caption2, design: .monospaced))
+                            .foregroundStyle(AppTheme.primaryText)
+                            .textSelection(.enabled)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(.top, 6)
+                    }
+                }
+                .padding(.top, 8)
+            }
+            .font(.caption.weight(.semibold))
+            .foregroundStyle(AppTheme.primaryText)
+            .padding(10)
+            .background(AppTheme.panelSoft, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+            .overlay(
+                RoundedRectangle(cornerRadius: 10, style: .continuous)
+                    .stroke(AppTheme.border, lineWidth: 1)
+            )
         }
+    }
+}
+
+private struct FloatingAIExplanationCard: View {
+    @ObservedObject var store: AppStore
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Label("AI 中文解读", systemImage: "brain")
+                    .font(.callout.weight(.semibold))
+
+                Spacer()
+
+                Button {
+                    Task {
+                        await store.runLLMExplanation()
+                    }
+                } label: {
+                    Label("重新生成", systemImage: "arrow.clockwise")
+                }
+                .font(.caption)
+                .buttonStyle(.bordered)
+                .disabled(store.isExplaining || store.result == nil)
+            }
+
+            if store.isExplaining {
+                HStack(spacing: 10) {
+                    ProgressView()
+                        .controlSize(.small)
+                    Text("正在整理 Surf 数据")
+                        .font(.caption)
+                        .foregroundStyle(AppTheme.mutedText)
+                }
+            } else if let explanation = store.aiExplanation, !explanation.isEmpty {
+                Text(verbatim: explanation)
+                    .font(.callout)
+                    .foregroundStyle(AppTheme.primaryText)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else if let errorMessage = store.llmErrorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.caption)
+                    .foregroundStyle(.orange)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            } else {
+                Text("等待 AI 中文解读。")
+                    .font(.caption)
+                    .foregroundStyle(AppTheme.mutedText)
+            }
+        }
+        .padding(11)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .background(AppTheme.panel, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: 12, style: .continuous)
+                .stroke(AppTheme.border, lineWidth: 1)
+        )
     }
 }
 
@@ -367,19 +502,19 @@ private struct FloatingSectionCard: View {
                 .font(.callout.weight(.semibold))
 
             VStack(spacing: 7) {
-                ForEach(section.rows.prefix(6)) { row in
+                ForEach(section.rows) { row in
                     HStack(alignment: .firstTextBaseline, spacing: 8) {
                         Text(row.label)
                             .font(.caption)
                             .foregroundStyle(AppTheme.mutedText)
                             .frame(width: 76, alignment: .leading)
-                            .lineLimit(1)
+                            .lineLimit(2)
 
                         Text(row.value)
                             .font(row.style == .mono ? .system(.caption, design: .monospaced) : .caption)
                             .foregroundStyle(color(for: row.style))
                             .textSelection(.enabled)
-                            .lineLimit(3)
+                            .fixedSize(horizontal: false, vertical: true)
                             .frame(maxWidth: .infinity, alignment: .leading)
                     }
                 }
