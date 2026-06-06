@@ -1,6 +1,12 @@
 import Foundation
 
-actor SurfClient {
+protocol SurfProviding {
+    func research(query: String, kind: QueryKind, chainFilter: ChainFilter) async throws -> ResearchSnapshot
+    func walletTokenAssets(address: String, chains: [ChainProfile]) async throws -> [WalletChainTokenAssets]
+    func tokenPriceAnchor(symbol rawSymbol: String) async throws -> TokenPriceAnchor
+}
+
+actor SurfClient: SurfProviding {
     private let commandTimeout: TimeInterval = 30
     private var cachedExecutable: String?
 

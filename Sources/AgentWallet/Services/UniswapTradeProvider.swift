@@ -232,6 +232,15 @@ protocol TradeProvider {
         chain: ChainProfile,
         walletAddress: String
     ) async throws -> UniswapTradePlan
+
+    func resolveTokenCandidates(
+        query: String,
+        chain: ChainProfile,
+        spendAsset: TokenProfile,
+        spendAmount: String,
+        walletAddress: String,
+        referencePriceUSD: Double?
+    ) async throws -> [UniswapTokenCandidate]
 }
 
 struct UniswapTradeProvider: TradeProvider {

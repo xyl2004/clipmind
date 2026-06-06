@@ -413,6 +413,36 @@ enum CoreSelfTests {
         await store3.askAboutSelectedContext()
         try suite.equal(unusedStub.callCount, 0, "rule mode skips LLM classifier")
         try suite.equal(store3.floatingWalletIntent?.action, WalletIntentAction.transfer, "rule mode still produces intent via parser")
+
+        let zecMissingAmountJSON = """
+        {"action":"swap","chain":null,"target_address":"","target_query":"zec","transaction_hash":"","spend_asset_symbol":"USDC","spend_amount":"","slippage_percent":null,"unsupported_reason":""}
+        """
+        let zecTradeProvider = StubTradeProvider(tokenCandidates: [])
+        let zecStore = AppStore(
+            surfClient: StubSurfProvider(priceAnchor: zecPriceAnchor()),
+            tradeProvider: zecTradeProvider,
+            intentClassifier: IntentClassifier(backend: StubIntentClassifierBackend(responses: [.success(zecMissingAmountJSON)])),
+            intentBackendMode: .auto
+        )
+        zecStore.input = "$zec"
+        zecStore.chatQuestion = "我能购买这个代币吗"
+        await zecStore.askAboutSelectedContext()
+        try suite.equal(
+            zecTradeProvider.candidateRequests.count,
+            ChainRegistry.supported.filter(\.supportsSwap).count,
+            "missing-amount swap still probes Uniswap chains"
+        )
+        try suite.equal(zecTradeProvider.candidateRequests.first?.query, "zec", "zec preflight probes normalized token query")
+        try suite.equal(zecTradeProvider.candidateRequests.first?.spendAmount, "1", "zec preflight uses one USDC probe amount")
+        try suite.equal(zecStore.swapPriceAnchor?.symbol, "ZEC", "zec preflight stores Surf price anchor")
+        try suite.check(
+            zecStore.floatingWalletIntent?.missingFields.contains("支付金额") == true,
+            "zec preflight still asks user for payment amount"
+        )
+        try suite.check(
+            zecStore.floatingWalletActionErrorMessage?.contains("Uniswap token list") == true,
+            "zec preflight keeps Uniswap no-candidate message visible"
+        )
     }
 
     @MainActor
@@ -859,6 +889,28 @@ enum CoreSelfTests {
         )
     }
 
+    private static func zecPriceAnchor() -> TokenPriceAnchor {
+        TokenPriceAnchor(
+            result: SurfCommandResult(
+                operation: SurfOperation(command: "market-price", arguments: [], title: "ZEC Surf 价格", chain: nil),
+                stdout: "",
+                stderr: "",
+                exitCode: 0,
+                jsonObject: [
+                    "symbol": "ZEC",
+                    "summary": [
+                        "last": 350.85,
+                        "latest_dt": 1_780_640_700,
+                        "change_pct": -41.99,
+                        "high": 604.91,
+                        "low": 350.85
+                    ]
+                ]
+            ),
+            fallbackSymbol: "ZEC"
+        )!
+    }
+
     private static func withEnvironment(_ values: [String: String?], run body: () throws -> Void) rethrows {
         let originalValues = Dictionary(uniqueKeysWithValues: values.keys.map { key in
             (key, getenv(key).map { String(cString: $0) })
@@ -884,6 +936,78 @@ enum CoreSelfTests {
 
         try body()
     }
+}
+
+private actor StubSurfProvider: SurfProviding {
+    private let priceAnchor: TokenPriceAnchor?
+
+    init(priceAnchor: TokenPriceAnchor? = nil) {
+        self.priceAnchor = priceAnchor
+    }
+
+    func research(query: String, kind: QueryKind, chainFilter: ChainFilter) async throws -> ResearchSnapshot {
+        throw StubProviderError.unused
+    }
+
+    func walletTokenAssets(address: String, chains: [ChainProfile]) async throws -> [WalletChainTokenAssets] {
+        throw StubProviderError.unused
+    }
+
+    func tokenPriceAnchor(symbol rawSymbol: String) async throws -> TokenPriceAnchor {
+        guard let priceAnchor else {
+            throw StubProviderError.unused
+        }
+        return priceAnchor
+    }
+}
+
+private final class StubTradeProvider: TradeProvider {
+    struct CandidateRequest: Equatable {
+        let query: String
+        let chainID: String
+        let spendAssetSymbol: String
+        let spendAmount: String
+        let referencePriceUSD: Double?
+    }
+
+    private let tokenCandidates: [UniswapTokenCandidate]
+    private(set) var candidateRequests: [CandidateRequest] = []
+
+    init(tokenCandidates: [UniswapTokenCandidate]) {
+        self.tokenCandidates = tokenCandidates
+    }
+
+    func buildSwapPlan(
+        draft: TradeIntentDraft,
+        chain: ChainProfile,
+        walletAddress: String
+    ) async throws -> UniswapTradePlan {
+        throw StubProviderError.unused
+    }
+
+    func resolveTokenCandidates(
+        query: String,
+        chain: ChainProfile,
+        spendAsset: TokenProfile,
+        spendAmount: String,
+        walletAddress: String,
+        referencePriceUSD: Double?
+    ) async throws -> [UniswapTokenCandidate] {
+        candidateRequests.append(
+            CandidateRequest(
+                query: query,
+                chainID: chain.id,
+                spendAssetSymbol: spendAsset.symbol,
+                spendAmount: spendAmount,
+                referencePriceUSD: referencePriceUSD
+            )
+        )
+        return tokenCandidates
+    }
+}
+
+private enum StubProviderError: Error {
+    case unused
 }
 
 private struct CoreSelfTestSuite {

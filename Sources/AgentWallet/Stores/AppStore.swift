@@ -78,18 +78,18 @@ final class AppStore: ObservableObject {
     @Published var tradeErrorMessage: String?
     @Published var tradeHistory: [TradeHistoryItem] = []
 
-    private let surfClient: SurfClient
+    private let surfClient: any SurfProviding
     private let llmClient: LLMClient
-    private let tradeProvider: UniswapTradeProvider
+    private let tradeProvider: any TradeProvider
     private let localWalletClient: LocalWalletClient
     private let intentClassifier: IntentClassifier
     private let intentBackendMode: IntentBackendMode
     private var selectedTextSourceRect: CGRect?
 
     init(
-        surfClient: SurfClient = SurfClient(),
+        surfClient: any SurfProviding = SurfClient(),
         llmClient: LLMClient = LLMClient(),
-        tradeProvider: UniswapTradeProvider = UniswapTradeProvider(),
+        tradeProvider: any TradeProvider = UniswapTradeProvider(),
         localWalletClient: LocalWalletClient = LocalWalletClient(),
         intentClassifier: IntentClassifier? = nil,
         intentBackendMode: IntentBackendMode? = nil
@@ -1181,7 +1181,20 @@ final class AppStore: ObservableObject {
         floatingWalletIntent = intent
 
         if !intent.missingFields.isEmpty {
-            let message = "我识别到\(intent.action.title)意图，但还缺：\(intent.missingFieldsText)。请补充清楚后我再生成确认单。"
+            let preflightedSwap = shouldPreflightSwapCandidates(for: intent)
+            if preflightedSwap {
+                await resolveFloatingSwapTokenCandidates(intent, sessionID: sessionID)
+            }
+
+            var message = "我识别到\(intent.action.title)意图，但还缺：\(intent.missingFieldsText)。请补充清楚后我再生成确认单。"
+            if preflightedSwap {
+                if let candidateError = floatingWalletActionErrorMessage,
+                   !candidateError.isEmpty {
+                    message += "\n\(candidateError)"
+                } else {
+                    message += " 我已先用 1 \(intent.spendAsset.symbol) 作为探测金额，向 Surf 和 Uniswap 查找参考价、支持链和候选合约。"
+                }
+            }
             floatingWalletActionErrorMessage = message
             appendMessage(ContextChatMessage(role: .assistant, text: message), to: sessionID)
             return true
@@ -1207,6 +1220,13 @@ final class AppStore: ObservableObject {
 
         isBuildingFloatingWalletAction = false
         return true
+    }
+
+    private func shouldPreflightSwapCandidates(for intent: WalletIntentDraft) -> Bool {
+        intent.action == .swap
+            && intent.targetAddress.isEmpty
+            && !intent.targetQuery.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            && intent.missingFields.contains("支付金额")
     }
 
     private func buildFloatingSwapPlan(
@@ -1262,15 +1282,16 @@ final class AppStore: ObservableObject {
         floatingWalletActionErrorMessage = nil
 
         let quoteWalletAddress = localWalletAccount?.address ?? "0x000000000000000000000000000000000000dEaD"
+        let probeSpendAmount = swapCandidateProbeSpendAmount(for: intent)
         let priceAnchorResult = await fetchSwapPriceAnchor(for: query)
         swapPriceAnchor = priceAnchorResult.anchor
         if let anchor = priceAnchorResult.anchor {
             let changeText = anchor.formattedChange.map { "，24h \($0)" } ?? ""
-            floatingWalletActionStatusMessage = "Surf 参考价：\(anchor.symbol) \(anchor.formattedPrice)\(changeText)。正在从 Uniswap 在 \(chainSummary) 探测可成交流动性。"
+            floatingWalletActionStatusMessage = "Surf 参考价：\(anchor.symbol) \(anchor.formattedPrice)\(changeText)。正在从 Uniswap 在 \(chainSummary) 用 \(probeSpendAmount) \(intent.spendAsset.symbol) 探测可成交流动性。"
         } else if let errorMessage = priceAnchorResult.errorMessage {
             floatingWalletActionStatusMessage = "Surf 价格暂不可用：\(errorMessage)。仍会从 Uniswap 在 \(chainSummary) 探测候选。"
         } else {
-            floatingWalletActionStatusMessage = "正在从 Uniswap 搜索 \(query)，并在 \(chainSummary) 探测 \(intent.spendAmount) \(intent.spendAsset.symbol) 的可成交流动性。"
+            floatingWalletActionStatusMessage = "正在从 Uniswap 搜索 \(query)，并在 \(chainSummary) 探测 \(probeSpendAmount) \(intent.spendAsset.symbol) 的可成交流动性。"
         }
 
         var resolvedCandidates: [UniswapTokenCandidate] = []
@@ -1281,7 +1302,7 @@ final class AppStore: ObservableObject {
                     query: query,
                     chain: chain,
                     spendAsset: swapSpendAsset(for: intent, chain: chain),
-                    spendAmount: intent.spendAmount,
+                    spendAmount: probeSpendAmount,
                     walletAddress: quoteWalletAddress,
                     referencePriceUSD: priceAnchorResult.anchor?.priceUSD
                 )
@@ -1313,6 +1334,11 @@ final class AppStore: ObservableObject {
         isResolvingSwapTokenCandidates = false
     }
 
+    private func swapCandidateProbeSpendAmount(for intent: WalletIntentDraft) -> String {
+        let trimmed = intent.spendAmount.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? "1" : trimmed
+    }
+
     func selectSwapTokenCandidate(_ candidate: UniswapTokenCandidate) async {
         guard candidate.canSelectForSwap else {
             floatingWalletActionErrorMessage = "这个候选没有 Uniswap 可成交报价，不能直接生成交易确认单。"
@@ -1321,6 +1347,11 @@ final class AppStore: ObservableObject {
 
         guard let intent = floatingWalletIntent, intent.action == .swap else {
             floatingWalletActionErrorMessage = "当前没有可继续的买币意图。"
+            return
+        }
+
+        guard !intent.missingFields.contains("支付金额") else {
+            floatingWalletActionErrorMessage = "请先补充支付金额，再选择合约生成正式 Uniswap 确认单。"
             return
         }
 
