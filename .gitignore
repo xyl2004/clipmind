@@ -7,8 +7,7 @@ DerivedData/
 .env.*
 
 # Website (Next.js)
-website/node_modules
-website/.next
-website/.vercel
-website/out
-website/.env*.local
+web/
+website/
+docs/superpowers/plans/*showcase-page*.md
+docs/superpowers/specs/*showcase-page*.md
