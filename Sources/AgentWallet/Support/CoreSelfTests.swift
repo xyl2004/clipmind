@@ -11,6 +11,7 @@ enum CoreSelfTests {
         try testStructuredIntentAdapter(&suite)
         try await testIntentClassifierStub(&suite)
         try testIntentClassifierPrompt(&suite)
+        try testBroadcastChatRecordFormat(&suite)
         try await testAppStoreIntentDispatch(&suite)
         try await testAppStoreCheckActions(&suite)
         try await testAppStoreIntentStatePreservation(&suite)
@@ -371,6 +372,29 @@ enum CoreSelfTests {
             question: "?"
         )
         try suite.check(truncated.count < longContext.count, "user payload truncates oversized selected context")
+    }
+
+    private static func testBroadcastChatRecordFormat(_ suite: inout CoreSelfTestSuite) throws {
+        let hash = "0xabcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789"
+        let base = ChainRegistry.base
+
+        let swap = BroadcastChatFormatter.formatSuccess(action: .swap, hash: hash, chain: base)
+        try suite.check(swap.contains("Base 上完成 Uniswap 兑换"), "swap success header on Base")
+        try suite.check(swap.contains("交易哈希："), "swap success hash row label")
+        try suite.check(swap.contains("https://basescan.org/tx/\(hash)"), "swap success contains explorer URL")
+
+        let approval = BroadcastChatFormatter.formatSuccess(
+            action: .swapApproval(spendSymbol: "USDC"),
+            hash: hash,
+            chain: base
+        )
+        try suite.check(approval.contains("USDC 授权"), "approval success names spend symbol")
+        try suite.check(approval.contains("授权上链后"), "approval success has next-step hint")
+        try suite.check(approval.contains("https://basescan.org/tx/\(hash)"), "approval success contains explorer URL")
+
+        let transfer = BroadcastChatFormatter.formatSuccess(action: .transfer, hash: hash, chain: base)
+        try suite.check(transfer.contains("Base 上广播转账"), "transfer success header on Base")
+        try suite.check(transfer.contains("https://basescan.org/tx/\(hash)"), "transfer success contains explorer URL")
     }
 
     @MainActor
