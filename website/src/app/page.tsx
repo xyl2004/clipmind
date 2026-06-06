@@ -3,6 +3,7 @@ import { HeroSection } from "@/components/HeroSection"
 import { NavBar } from "@/components/NavBar"
 import { ScenarioOneSection } from "@/components/ScenarioOneSection"
 import { ScenarioTwoSection } from "@/components/ScenarioTwoSection"
+import { TechStackSection } from "@/components/TechStackSection"
 
 export default function Home() {
   return (
@@ -12,6 +13,7 @@ export default function Home() {
       <ScenarioOneSection />
       <ScenarioTwoSection />
       <CapabilitiesSection />
+      <TechStackSection />
     </>
   )
 }
