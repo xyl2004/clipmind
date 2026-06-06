@@ -2,6 +2,8 @@
 
 **Highlight Web3 text. Ask AI. Sign locally.**
 
+[Product page](https://clipmind-smoky.vercel.app)
+
 ClipMind is a macOS AI wallet layer for the moment when a user sees something on-chain and does not yet know what it means or what to do next.
 
 Select a wallet address, token contract, transaction hash, project name, or Web3 paragraph anywhere on macOS. Press `Control + Option + W`. ClipMind opens a floating AI panel that can explain the selection, fetch on-chain evidence, classify the user's intent, and prepare a locally signed EVM wallet action.
@@ -83,7 +85,7 @@ ClipMind builds a Uniswap swap plan, shows expected output, gas, quote freshness
 - Floating macOS context panel opened with `Control + Option + W`.
 - Per-selection chat sessions and history.
 - EVM research for wallets, tokens, transactions, and projects through Surf CLI.
-- Chinese AI explanations through B.AI / DeepSeek.
+- Chinese AI explanations through DeepSeek V4 API.
 - LLM-first structured intent classification with rule fallback.
 - Read-only checks for balances, addresses, tokens, and transactions.
 - User-confirmed transfer and swap planning.
@@ -110,8 +112,8 @@ ClipMind treats AI output as a draft, not authority.
 - web3swift + secp256k1 local signing
 - macOS Keychain
 - Surf CLI for on-chain research
-- B.AI / DeepSeek for AI explanation and intent classification
-- Uniswap Trading API for swap quotes and transactions
+- DeepSeek V4 API for AI explanation and intent classification
+- Uniswap API for swap quotes and transactions
 
 ## Requirements
 
@@ -119,7 +121,7 @@ ClipMind treats AI output as a draft, not authority.
 - Xcode 15+ with Swift 5.9 or newer
 - Surf CLI
 - Accessibility permission for selected-text capture
-- Optional B.AI API key for AI explanations and intent classification
+- Optional DeepSeek V4 API key for AI explanations and intent classification
 - Optional Uniswap API key for swap quotes and transactions
 
 Install Surf if needed:
@@ -132,9 +134,7 @@ surf sync
 Useful environment variables:
 
 ```bash
-CLIPMIND_BAI_API_KEY=...
 CLIPMIND_UNISWAP_API_KEY=...
-CLIPMIND_BAI_BASE_URL=https://api.b.ai
 CLIPMIND_INTENT_BACKEND=auto   # auto, llm, or rule
 CLIPMIND_RPC_ETHEREUM=...
 CLIPMIND_RPC_BASE=...
