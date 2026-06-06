@@ -661,7 +661,6 @@ final class AppStore: ObservableObject {
 
     func buildTradePlan() async {
         let chain = selectedTradeChain
-        tradeDraft.applyDefaultSpendToken(for: chain)
 
         guard let localWalletAccount else {
             tradeErrorMessage = "请先创建或导入本地钱包，再生成 Uniswap 确认单。"

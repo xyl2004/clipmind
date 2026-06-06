@@ -462,7 +462,7 @@ struct UniswapTradeProvider: TradeProvider {
                 walletAddress: walletAddress,
                 chain: chain,
                 slippage: 1.0,
-                routingPreference: "CLASSIC"
+                routingPreference: "FASTEST"
             )
             let quote = quoteObject["quote"] as? [String: Any] ?? [:]
             let outputBaseUnits = Self.extractOutputAmount(from: quoteObject)
