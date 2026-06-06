@@ -1,4 +1,5 @@
 import { CapabilitiesSection } from "@/components/CapabilitiesSection"
+import { CtaSection } from "@/components/CtaSection"
 import { HeroSection } from "@/components/HeroSection"
 import { NavBar } from "@/components/NavBar"
 import { ScenarioOneSection } from "@/components/ScenarioOneSection"
@@ -14,6 +15,7 @@ export default function Home() {
       <ScenarioTwoSection />
       <CapabilitiesSection />
       <TechStackSection />
+      <CtaSection />
     </>
   )
 }
