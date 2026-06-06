@@ -542,7 +542,7 @@ private struct FloatingChatBubble: View {
             Text(message.role == .assistant ? "AI" : "你")
                 .font(.caption)
                 .foregroundStyle(AppTheme.mutedText)
-            Text(verbatim: message.text)
+            Text(ChatBubbleAttributedString.build(message.text))
                 .font(.callout)
                 .textSelection(.enabled)
                 .frame(maxWidth: .infinity, alignment: .leading)
