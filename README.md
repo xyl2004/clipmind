@@ -1,141 +1,159 @@
 # ClipMind
 
-**Highlight Web3 text. Ask AI. Sign locally.**
+**选中文字，问 AI，本地签名。**
 
-[Product page](https://clipmind-smoky.vercel.app)
+产品展示页：[https://clipmind-showcase.vercel.app](https://clipmind-showcase.vercel.app)
 
-ClipMind is a macOS AI wallet layer for the moment when a user sees something on-chain and does not yet know what it means or what to do next.
+ClipMind 是一款 macOS 区块链 AI 钱包助手。它解决的是用户在 Web3 场景里最常遇到的那一刻：看到一个地址、合约、交易哈希、项目名或代币名，但还不知道它是什么、是否安全、下一步该不该操作。
 
-Select a wallet address, token contract, transaction hash, project name, or Web3 paragraph anywhere on macOS. Press `Control + Option + W`. ClipMind opens a floating AI panel that can explain the selection, fetch on-chain evidence, classify the user's intent, and prepare a locally signed EVM wallet action.
+用户只需要在任意 macOS 页面里选中文字，按下 `Control + Option + W`，ClipMind 会打开一个全局悬浮窗。AI 可以基于选中内容做项目调研、代币分析、合约和地址安全检查，并在用户明确确认后准备转账或交易。最后一步签名始终由用户手动完成，私钥只保存在本地 macOS Keychain，不会暴露给 AI。
 
-## The Problem
+## 核心问题
 
-Web3 users constantly move between chats, explorers, docs, token pages, and trading tools. The hard part is not only signing a transaction. It is understanding the context before signing:
+Web3 用户经常在聊天软件、X、区块浏览器、项目文档、行情页和交易工具之间来回切换。真正困难的不只是签名，而是签名前的理解和判断：
 
-- What is this address?
-- Is this token contract the right one?
-- What happened in this transaction?
-- Can I send funds here?
-- Can I buy this token safely?
+- 这个地址是什么？
+- 这个合约是不是正确的代币合约？
+- 这笔交易发生了什么？
+- 这个项目是做什么的？
+- 朋友让我买这个币，我能不能先查清楚？
+- 这个地址能不能收款，是否存在风险？
 
-Most wallets wait for a dApp transaction request. ClipMind starts earlier: at the selected text.
+传统钱包通常从 dApp 发起交易请求后才出现。ClipMind 往前走一步，从用户已经看到并选中的文字开始。
 
-## The Solution
+## 产品思路
 
-ClipMind turns selected Web3 text into an AI-guided wallet workflow:
+ClipMind 把一段选中文本变成一个 AI 引导的钱包工作流：
 
 ```text
-Select Web3 text
--> Open ClipMind with Control + Option + W
--> Ask a natural-language question or command
--> Fetch Surf-backed on-chain context when useful
--> Classify intent: ask, check, transfer, or swap
--> Build a readable transaction plan
--> Validate chain, balance, gas, quote freshness, and risk notes
--> User confirms
--> Local wallet signs
+选中 Web3 文本
+-> 按 Control + Option + W 唤起 ClipMind
+-> 用自然语言提问或下达操作意图
+-> 需要时调用 Surf 获取链上证据和项目信息
+-> 识别意图：问答、风险检查、转账、交易
+-> 生成可读的交易或转账确认单
+-> 校验链、余额、Gas、报价新鲜度和风险提示
+-> 用户确认
+-> 本地钱包签名
 ```
 
-AI helps understand and prepare. The local wallet signs only after explicit confirmation.
+AI 负责理解、解释和准备操作，钱包只在用户明确确认后签名。
 
-## Demo Flow
+## 典型场景
 
-### 1. Ask About Selected Text
+### 1. 选中项目名，快速调研
 
-Select a wallet address, token contract, transaction hash, project name, or paragraph, then ask:
+用户在聊天、X 或网页里看到一个项目名，例如：
+
+```text
+Virtuals
+Morpho
+```
+
+选中后可以直接问：
+
+```text
+这个项目是做什么的？
+我可以怎么参与这个项目？
+这个项目最近有什么风险？
+```
+
+ClipMind 会结合当前选中内容、Surf 数据、链上信息和相关新闻，给出结构化中文解释。
+
+### 2. 选中地址或合约，检查风险
+
+用户可以选中钱包地址、代币合约或交易哈希，然后问：
 
 ```text
 这个地址安全吗？
-这个交易发生了什么？
-这个项目是做什么的？
+这个合约是什么？
+这笔交易发生了什么？
 ```
 
-ClipMind can answer with selected-text context plus Surf-backed EVM data.
+ClipMind 会尝试识别链、资产、合约、钱包行为和风险信号，避免用户把合约地址误当成收款地址，或在不了解对象的情况下交互。
 
-### 2. Send To A Selected Address
-
-Select a wallet address and ask:
+### 3. 选中收款地址，准备转账
 
 ```text
 给这个地址转 5 USDC
 ```
 
-ClipMind parses the transfer intent, builds a confirmation plan, checks wallet state, and requires local confirmation before signing.
+ClipMind 会解析转账意图，生成确认单，检查地址、链、余额和 Gas。用户确认后，交易才会由本地钱包签名。
 
-### 3. Buy A Selected Token
-
-Select a token contract and ask:
+### 4. 选中代币，准备交易
 
 ```text
-用 20U 买这个币
+用 0.001 ETH 买这个
 ```
 
-ClipMind builds a Uniswap swap plan, shows expected output, gas, quote freshness, approval needs, and safety notes before the user signs.
+ClipMind 会把自然语言转换成结构化交易意图，调用 Uniswap 报价，展示预计收到、Gas、授权需求、报价新鲜度和风险提示。最后一步必须由用户手动签名，防止 AI 幻觉或误判直接执行。
 
-## Why It Is Different
+## 为什么不同
 
-- **Selection-first UX**: the workflow begins from text the user is already looking at, not from a wallet form.
-- **AI-native intent layer**: natural language is converted into structured wallet actions with a rule-based fallback.
-- **Evidence before execution**: Surf research can ground answers and checks before a transaction is prepared.
-- **Local signing boundary**: private keys stay in macOS Keychain and are never exposed to the LLM.
-- **Floating wallet surface**: the wallet appears near the user's current context instead of forcing a tab or app switch.
+- **选中文字优先**：工作流从用户正在看的内容开始，而不是从一个空白钱包表单开始。
+- **AI 原生意图层**：自然语言可以被转换成结构化钱包操作，并保留规则兜底。
+- **先证据，后执行**：在准备交易前，先通过 Surf 和链上数据补充上下文。
+- **本地签名边界**：私钥只保存在 macOS Keychain，AI 不读取私钥，也不能直接调用签名。
+- **全局悬浮窗**：用户不用离开当前页面，就能完成调研、追问、确认和执行。
 
-## Current Capabilities
+## 当前能力
 
-- Floating macOS context panel opened with `Control + Option + W`.
-- Per-selection chat sessions and history.
-- EVM research for wallets, tokens, transactions, and projects through Surf CLI.
-- Chinese AI explanations through DeepSeek V4 API.
-- LLM-first structured intent classification with rule fallback.
-- Read-only checks for balances, addresses, tokens, and transactions.
-- User-confirmed transfer and swap planning.
-- Uniswap swap quotes for Ethereum, Base, Arbitrum, OP Mainnet, and Polygon.
-- Local EVM wallet creation/import with private key storage in macOS Keychain.
-- Local signing only after explicit user confirmation.
-- Core self-test suite for intent parsing, validation, chain config, wallet assets, and local wallet export checks.
+- 通过 `Control + Option + W` 唤起 macOS 全局悬浮窗。
+- 根据选中文本创建独立对话和历史记录。
+- 通过 Surf CLI 查询钱包、代币、交易、合约和项目信息。
+- 使用 DeepSeek V4 API 生成中文解释和意图分类。
+- 支持 LLM 优先的结构化意图识别，并提供规则兜底。
+- 支持余额、地址、代币、交易和合约的只读检查。
+- 支持用户确认后的转账和交易规划。
+- 支持 Ethereum、Base、Arbitrum、OP Mainnet、Polygon 等 EVM 链的 Uniswap 报价。
+- 支持本地 EVM 钱包创建和导入。
+- 私钥存储在 macOS Keychain。
+- 所有签名都必须经过用户明确确认。
+- 内置核心自测，覆盖意图解析、交易校验、链配置、钱包资产和本地钱包导出检查。
 
-## Safety Model
+## 安全模型
 
-ClipMind treats AI output as a draft, not authority.
+ClipMind 把 AI 输出视为草稿，而不是最终权限。
 
-- AI cannot read private keys.
-- AI cannot call signing functions directly.
-- AI cannot broadcast a transaction without user confirmation.
-- Transaction plans must pass validation before signing.
-- Expired quotes, invalid addresses, chain mismatches, missing fields, insufficient balance, and gas problems block execution.
-- Private-key export requires a separate local confirmation.
+- AI 不能读取私钥。
+- AI 不能直接调用签名函数。
+- AI 不能在没有用户确认的情况下广播交易。
+- 交易计划必须通过校验后才能进入签名步骤。
+- 报价过期、地址无效、链不匹配、字段缺失、余额不足或 Gas 异常都会阻止执行。
+- 私钥导出需要单独的本地确认。
 
-## Tech Stack
+## 技术栈
 
-- SwiftUI macOS app
+- SwiftUI macOS 应用
 - Swift Package Manager
-- web3swift + secp256k1 local signing
+- web3swift + secp256k1 本地签名
 - macOS Keychain
-- Surf CLI for on-chain research
-- DeepSeek V4 API for AI explanation and intent classification
-- Uniswap API for swap quotes and transactions
+- Surf CLI 链上调研
+- DeepSeek V4 API 中文解释和意图识别
+- Uniswap API 报价和交易构建
+- Next.js + Vercel 产品展示页
 
-## Requirements
+## 环境要求
 
 - macOS 14+
-- Xcode 15+ with Swift 5.9 or newer
+- Xcode 15+，Swift 5.9 或更新版本
 - Surf CLI
-- Accessibility permission for selected-text capture
-- Optional DeepSeek V4 API key for AI explanations and intent classification
-- Optional Uniswap API key for swap quotes and transactions
+- 选中文本捕获需要授予 macOS 辅助功能权限
+- 可选：DeepSeek V4 API key，用于 AI 解释和意图分类
+- 可选：Uniswap API key，用于报价和交易构建
 
-Install Surf if needed:
+安装 Surf：
 
 ```bash
 curl -fsSL https://downloads.asksurf.ai/cli/releases/install.sh | sh
 surf sync
 ```
 
-Useful environment variables:
+常用环境变量：
 
 ```bash
 CLIPMIND_UNISWAP_API_KEY=...
-CLIPMIND_INTENT_BACKEND=auto   # auto, llm, or rule
+CLIPMIND_INTENT_BACKEND=auto   # auto, llm, rule
 CLIPMIND_RPC_ETHEREUM=...
 CLIPMIND_RPC_BASE=...
 CLIPMIND_RPC_ARBITRUM=...
@@ -143,13 +161,13 @@ CLIPMIND_RPC_OPTIMISM=...
 CLIPMIND_RPC_POLYGON=...
 ```
 
-## Run
+## 运行
 
 ```bash
 ./script/build_and_run.sh
 ```
 
-Useful flags:
+常用参数：
 
 ```bash
 ./script/build_and_run.sh --verify
@@ -157,20 +175,20 @@ Useful flags:
 ./script/build_and_run.sh --debug
 ```
 
-## Test
+## 测试
 
 ```bash
 ./script/test.sh
 ```
 
-This runs:
+这个脚本会执行：
 
 ```bash
 swift run ClipMind --self-test-core
 ```
 
-The self-test path avoids real network calls and uses isolated test Keychain services. It is the active automated test entrypoint in this workspace.
+自测路径不会发起真实网络调用，并使用隔离的测试 Keychain 服务。它是当前仓库里主要的自动化测试入口。
 
-## Status
+## 产品状态
 
-ClipMind is an experimental competition build. It demonstrates a selection-first AI wallet workflow where AI helps users understand and prepare actions, while signing remains local and confirmation-gated.
+ClipMind 目前是一个实验性比赛版本。它展示了一种 selection-first AI wallet 工作流：AI 帮助用户理解、查证和准备操作，但最终签名必须留在本地，并由用户明确确认。
